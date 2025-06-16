@@ -1,4 +1,4 @@
-# My Lightweight Photo Gallery
+# pygallery: My Lightweight Photo Gallery
 
 This is a lightweight web application designed to serve as a simple photo gallery. It's built with Python (Flask) for the backend and uses HTML, CSS, and JavaScript for the frontend. The application allows you to browse photos organized in folders, view thumbnails, and see enlarged versions of images with navigation and download options. It's designed to be easily deployable using containers on a Fedora server.
 
@@ -24,7 +24,7 @@ pygallery/
 ├── config.ini                  # Configuration file for the gallery
 ├── requirements.txt            # Python dependencies
 ├── Dockerfile                  # Dockerfile to build the container image
-├── photo-gallery.container     # Quadlet file for Systemd service (Fedora)
+├── pygallery-app.container     # Quadlet file for Systemd service (Fedora)
 ├── generate_dummy_images.py    # Script to create test images
 ├── static/
 │   ├── css/
@@ -129,10 +129,10 @@ Access the gallery at `http://127.0.0.1:5000/gallery/` (or the port specified in
 
 ```bash
 # Using Podman
-podman build -t my-photo-gallery .
+podman build -t pygallery .
 
 # Using Docker
-docker build -t my-photo-gallery .
+docker build -t pygallery .
 ```
 
 **Run the Container (for testing, or if not using Quadlet/Apache):**
@@ -145,19 +145,19 @@ HOST_THUMBNAILS_DIR="/home/user/my_gallery_thumbnails"
 
 # Using Podman
 podman run -d \
-  --name photo-gallery-app \
+  --name pygallery-app \
   -p 8000:5000 \
   -v "${HOST_PHOTOS_DIR}":/app/photos:Z \
   -v "${HOST_THUMBNAILS_DIR}":/app/thumbnails:Z \
-  my-photo-gallery
+  pygallery
 
 # Using Docker
 docker run -d \
-  --name photo-gallery-app \
+  --name pygallery-app \
   -p 8000:5000 \
   -v "${HOST_PHOTOS_DIR}":/app/photos \
   -v "${HOST_THUMBNAILS_DIR}":/app/thumbnails \
-  my-photo-gallery
+  pygallery
 ```
 Access the gallery at `http://your_server_ip:8000/gallery/`.
 
@@ -167,20 +167,20 @@ Quadlet allows you to manage your container as a systemd service.
 
 **1. Place the Quadlet File:**
 
-Save the `photo-gallery.container` file to `/etc/containers/systemd/`:
+Save the `pygallery-app.container` file to `/etc/containers/systemd/`:
 
 ```ini
-# /etc/containers/systemd/photo-gallery.container
+# /etc/containers/systemd/pygallery-app.container
 [Container]
-ContainerName=photo-gallery-app
-Image=localhost/my-photo-gallery:latest
+ContainerName=pygallery-app
+Image=localhost/pygallery:latest
 Volume=/home/user/my_gallery_photos:/app/photos:Z # **UPDATE THIS PATH**
 Volume=/home/user/my_gallery_thumbnails:/app/thumbnails:Z # **UPDATE THIS PATH**
 PublishPort=8000:5000 # Container port 5000 mapped to host port 8000
 Restart=on-failure
 
 [Unit]
-Description=My Lightweight Photo Gallery Container
+Description=pygallery: My Lightweight Photo Gallery Container
 Wants=network-online.target
 After=network-online.target
 ```
@@ -190,8 +190,8 @@ After=network-online.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl start photo-gallery.service
-sudo systemctl enable photo-gallery.service # To start on boot
+sudo systemctl start pygallery-app.service
+sudo systemctl enable pygallery-app.service # To start on boot
 ```
 Access the gallery at `http://your_server_ip:8000/gallery/`.
 
@@ -201,7 +201,7 @@ If Apache is already running on port 80, you can use it as a reverse proxy to se
 
 **1. Ensure Container is Running (Internal Port Only):**
 
-Your `photo-gallery.container` file (or `podman run` command) **should not** publish port 80 or 8000 to the host if Apache is handling the public-facing access. It only needs to listen on port 5000 internally. You can remove `PublishPort` from your Quadlet file or bind it to `127.0.0.1` for internal testing: `PublishPort=127.0.0.1:8080:5000`.
+Your `pygallery-app.container` file (or `podman run` command) **should not** publish port 80 or 8000 to the host if Apache is handling the public-facing access. It only needs to listen on port 5000 internally. You can remove `PublishPort` from your Quadlet file or bind it to `127.0.0.1` for internal testing: `PublishPort=127.0.0.1:8080:5000`.
 
 **2. Apache Configuration (`/etc/httpd/conf.d/gallery.conf`):**
 
@@ -215,7 +215,7 @@ Create or modify an Apache configuration file:
     ProxyPreserveHost On
     ProxyRequests Off
 
-    # Get container's internal IP with: podman inspect photo-gallery-app | grep -i "IPAddress"
+    # Get container's internal IP with: podman inspect pygallery-app | grep -i "IPAddress"
     # Example IP: 172.17.0.2 (this will vary)
     ProxyPass /gallery/ http://<container_internal_ip>:5000/gallery/ nocanon
     ProxyPassReverse /gallery/ http://<container_internal_ip>:5000/gallery/
@@ -262,5 +262,5 @@ Feel free to fork this repository, open issues, or submit pull requests.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
