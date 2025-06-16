@@ -27,3 +27,4 @@ Pipfile
 
 # Ignore Photos directory
 photos/
+thumbnails/
