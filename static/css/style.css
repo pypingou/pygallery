@@ -188,7 +188,7 @@ body {
     top: 0;
     width: 100%; /* Full width */
     height: 100%; /* Full height */
-    overflow: auto; /* Enable scroll if needed */
+    overflow: hidden; /* Prevent scrolling within lightbox itself */
     background-color: rgba(0,0,0,0.9); /* Black w/ opacity */
     justify-content: center;
     align-items: center;
@@ -239,6 +239,36 @@ body {
     cursor: pointer;
 }
 
+/* New: Lightbox Navigation Buttons */
+.lightbox-nav-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #f1f1f1;
+    font-size: 50px; /* Increased size for better tap target */
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 1001; /* Above image, below close button if close button is higher */
+    padding: 0 15px; /* Added padding for better click/tap area */
+    transition: 0.3s;
+    user-select: none; /* Prevent text selection */
+    background-color: rgba(0,0,0,0.4); /* Slightly visible background */
+    border-radius: 8px; /* Rounded corners */
+}
+
+.lightbox-nav-btn:hover {
+    background-color: rgba(0,0,0,0.7); /* Darker on hover */
+}
+
+.prev-btn {
+    left: 20px; /* Position on the left */
+}
+
+.next-btn {
+    right: 20px; /* Position on the right */
+}
+
+
 /* --- Footer Styles --- */
 .footer {
     background-color: var(--secondary-bg);
@@ -283,6 +313,10 @@ body {
         width: 40px;
         height: 40px;
     }
+    .lightbox-nav-btn {
+        font-size: 40px; /* Smaller on smaller screens */
+        padding: 0 10px;
+    }
 }
 
 @media (max-width: 480px) {
@@ -312,6 +346,16 @@ body {
     }
     .album-card-count {
         font-size: 0.8rem;
+    }
+    .lightbox-nav-btn {
+        font-size: 30px; /* Even smaller on very small screens */
+        padding: 0 5px;
+    }
+    .prev-btn {
+        left: 10px;
+    }
+    .next-btn {
+        right: 10px;
     }
 }
 
