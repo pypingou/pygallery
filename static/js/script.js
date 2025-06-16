@@ -7,10 +7,11 @@ let currentPhotoIndex = 0; // Stores the index of the currently displayed photo
 document.addEventListener('DOMContentLoaded', () => {
     // Determine if we are on the main gallery page or an album page
     const pathname = window.location.pathname;
-    if (pathname === '/') {
+    // Check if the current path starts with /gallery/ or is just /gallery
+    if (pathname === '/gallery/' || pathname === '/gallery') {
         fetchAlbums();
-    } else if (pathname.startsWith('/album/')) {
-        const albumName = pathname.split('/album/')[1];
+    } else if (pathname.startsWith('/gallery/album/')) {
+        const albumName = pathname.split('/gallery/album/')[1];
         if (albumName) {
             document.getElementById('album-title').textContent = `Album: ${decodeURIComponent(albumName)}`;
             fetchPhotos(albumName);
@@ -23,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeBtn = document.querySelector('.close-btn');
     const prevBtn = document.getElementById('prev-photo-btn');
     const nextBtn = document.getElementById('next-photo-btn');
-    const downloadBtn = document.getElementById('download-photo-btn'); // New: Get download button
+    const downloadBtn = document.getElementById('download-photo-btn'); // Get download button
 
     closeBtn.addEventListener('click', (event) => {
         event.stopPropagation(); // Prevent click from bubbling to lightbox overlay
@@ -44,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // New: Add event listener for download button
+    // Add event listener for download button
     if (downloadBtn) {
         downloadBtn.addEventListener('click', (event) => {
             event.stopPropagation(); // Prevent closing lightbox
@@ -131,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // New: Function to trigger image download
+    // Function to trigger image download
     function downloadCurrentImage() {
         if (currentAlbumPhotos.length > 0) {
             const photo = currentAlbumPhotos[currentPhotoIndex];
@@ -157,7 +158,8 @@ async function fetchAlbums() {
     albumListDiv.innerHTML = 'Loading albums...';
 
     try {
-        const response = await fetch('/api/albums');
+        // Updated API endpoint to include /gallery prefix
+        const response = await fetch('/gallery/api/albums');
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -172,7 +174,8 @@ async function fetchAlbums() {
 
         albums.forEach(album => {
             const albumCard = document.createElement('a'); // Use <a> for navigation
-            albumCard.href = `/album/${encodeURIComponent(album.name)}`; // Encode for URL safety
+            // Updated album href to include /gallery prefix
+            albumCard.href = `/gallery/album/${encodeURIComponent(album.name)}`; // Encode for URL safety
             albumCard.classList.add('album-card');
 
             const albumImg = document.createElement('img');
@@ -212,7 +215,8 @@ async function fetchPhotos(albumName) {
     photoGridDiv.innerHTML = 'Loading photos...';
 
     try {
-        const response = await fetch(`/api/album/${encodeURIComponent(albumName)}/photos`);
+        // Updated API endpoint to include /gallery prefix
+        const response = await fetch(`/gallery/api/album/${encodeURIComponent(albumName)}/photos`);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -232,8 +236,6 @@ async function fetchPhotos(albumName) {
         photos.forEach((photo, index) => {
             const photoThumbnailDiv = document.createElement('div');
             photoThumbnailDiv.classList.add('photo-thumbnail');
-            // Instead of storing original_url directly, we'll pass the index and the full photos array
-            // photoThumbnailDiv.setAttribute('data-original-url', photo.original_url); // Removed
 
             const photoImg = document.createElement('img');
             photoImg.src = photo.thumbnail_url;
