@@ -10,6 +10,11 @@
     --hover-shadow-color: rgba(0, 0, 0, 0.2);
 }
 
+/* Apply box-sizing globally for consistent layout behavior */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
 body {
     font-family: 'Inter', sans-serif;
     margin: 0;
@@ -20,6 +25,7 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100vh; /* Ensure body takes full viewport height */
+    padding-top: 80px; /* Add padding to body to account for fixed header height */
 }
 
 .header {
@@ -28,7 +34,11 @@ body {
     border-bottom: 1px solid var(--border-color);
     box-shadow: 0 2px 4px var(--shadow-color);
     text-align: center;
-    position: relative;
+    position: fixed; /* Make header fixed */
+    top: 0; /* Position at the top */
+    width: 100%; /* Take full width */
+    z-index: 1000; /* Ensure it stays on top of other content */
+    box-sizing: border-box; /* Include padding in header's fixed width/height */
 }
 
 .header-title {
@@ -63,14 +73,16 @@ body {
 }
 
 .container {
-    max-width: 1200px;
+    /* Removed max-width to allow content to use full screen width */
+    width: 100%; /* Ensure it takes full available width */
     margin: 2rem auto;
-    padding: 0 1rem;
+    padding: 0 2rem; /* Increased default padding for better spacing on larger screens */
     flex-grow: 1; /* Allows content to push footer down */
 }
 
 .grid-container {
     display: grid;
+    /* Default for larger screens: allow flexible columns starting at 220px */
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 20px;
     justify-content: center;
@@ -138,9 +150,8 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 220px; /* Fixed height to accommodate 200x200 thumbnails plus padding */
+    height: 250px; /* Consistent height for thumbnails */
     padding: 10px; /* Padding inside the card */
-    box-sizing: border-box; /* Include padding in the element's total width and height */
 }
 
 .photo-thumbnail:hover {
@@ -171,7 +182,6 @@ body {
     justify-content: center;
     align-items: center;
     padding: 20px; /* Padding around the content */
-    box-sizing: border-box;
 }
 
 .lightbox-content {
@@ -218,6 +228,20 @@ body {
     cursor: pointer;
 }
 
+/* --- Footer Styles --- */
+.footer {
+    background-color: var(--secondary-bg);
+    color: var(--text-color);
+    text-align: center;
+    padding: 1rem;
+    border-top: 1px solid var(--border-color);
+    box-shadow: 0 -2px 4px var(--shadow-color);
+    margin-top: auto; /* Push footer to the bottom */
+    font-size: 0.85rem;
+    font-weight: 400;
+}
+
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .header-title {
@@ -231,13 +255,15 @@ body {
     }
     .container {
         margin-top: 1rem;
+        padding: 0 1rem; /* Adjusted padding for medium screens */
     }
     .grid-container {
+        /* For tablets and larger mobiles: try to fit columns starting at 180px */
         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 15px;
     }
     .album-card-img, .photo-thumbnail {
-        height: 150px;
+        height: 180px; /* Consistent height for consistency */
     }
     .close-btn {
         top: 10px;
@@ -259,12 +285,16 @@ body {
         padding: 0.4rem 0.8rem;
         font-size: 0.8rem;
     }
+    .container {
+        padding: 0 0.5rem; /* Adjusted padding for very small screens */
+    }
     .grid-container {
-        grid-template-columns: 1fr; /* Single column on very small screens */
+        /* For very small screens: force 2 columns to ensure side-by-side display */
+        grid-template-columns: repeat(2, 1fr); /* Explicitly set to 2 columns */
         gap: 10px;
     }
     .album-card-img, .photo-thumbnail {
-        height: 120px;
+        height: 150px; /* Consistent height for consistency on mobile */
     }
     .album-card-title {
         font-size: 1.1rem;
