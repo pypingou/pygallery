@@ -1,0 +1,45 @@
+# /etc/containers/systemd/photo-gallery.container
+#
+# This Quadlet file defines a systemd service for your Photo Gallery container.
+# It automatically manages the container using Podman.
+
+[Container]
+# Name of the container
+ContainerName=photo-gallery-app
+
+# Name of the image to run (must be built locally or pulled from a registry)
+Image=localhost/my-photo-gallery:latest
+
+# Define the volume mounts for your photos and thumbnails.
+# IMPORTANT: Replace /home/user/my_gallery_photos and /home/user/my_gallery_thumbnails
+# with the actual paths on your Fedora server where your photos and thumbnails reside.
+# Ensure these directories exist on the host.
+Volume=/home/user/my_gallery_photos:/app/photos:Z
+Volume=/home/user/my_gallery_thumbnails:/app/thumbnails:Z
+
+# Expose the container's port 5000 to the host's port 80.
+# Change "80" if you want to use a different host port (e.g., 8000:5000).
+PublishPort=80:5000
+
+# Automatically restart the container if it exits with a non-zero status
+# OnFailure will restart only if it fails (not on clean exit), unless you set Always.
+# For a web server, "always" or "on-failure" are common.
+Restart=on-failure
+
+# Add additional dependencies here, e.g., if you need network access
+# After=network-online.target
+
+# Optional: Set environment variables for the container if needed (e.g., specific Flask settings)
+# Env=FLASK_ENV=production
+
+# Optional: Add SELinux label to ensure container has proper access, often needed on Fedora.
+# This is typically handled by the :Z option on volumes, but can be explicit for system directories.
+# Label=io.containers.autoupdate=registry
+
+[Unit]
+# Description for the systemd service
+Description=My Lightweight Photo Gallery Container
+# Ensure network is up before starting the service
+Wants=network-online.target
+After=network-online.target
+
