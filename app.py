@@ -1,7 +1,7 @@
 # app.py
 import os
 import configparser
-from flask import Flask, render_template, send_from_directory, jsonify, url_for
+from flask import Flask, render_template, send_from_directory, jsonify, url_for, Blueprint
 from PIL import Image
 from pathlib import Path
 import threading
@@ -48,6 +48,10 @@ load_config()
 
 # Initialize Flask app after config is loaded
 app = Flask(__name__)
+
+# --- Create a Blueprint for the gallery with a URL prefix ---
+# All routes defined on 'gallery_bp' will automatically be prefixed with '/gallery'.
+gallery_bp = Blueprint('gallery', __name__, url_prefix='/gallery')
 
 # --- Thumbnail Generation Logic ---
 # Supported image extensions
@@ -126,9 +130,10 @@ def scan_photos_and_generate_thumbnails():
 
                     get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
 
-                    # Construct URLs for the frontend manually, as url_for requires a request context
-                    original_url = f"/photos/{album_dir}/{photo_filename}"
-                    thumb_url = f"/thumbnails/{album_dir}/{thumbnail_filename}"
+                    # Construct URLs for the frontend manually, now including the /gallery prefix
+                    # This is important because the Flask app now expects to serve from /gallery/
+                    original_url = f"/gallery/photos/{album_dir}/{photo_filename}"
+                    thumb_url = f"/gallery/thumbnails/{album_dir}/{thumbnail_filename}"
 
                     album_photos.append({
                         "original_filename": photo_filename,
@@ -145,12 +150,13 @@ def scan_photos_and_generate_thumbnails():
                 gallery_data[album_dir]["cover_thumbnail_url"] = album_photos[0]["thumbnail_url"]
             else:
                 # If no photos in album, use a placeholder or default
-                gallery_data[album_dir]["cover_thumbnail_url"] = "/static/placeholder.png" # You could add a placeholder image
+                # Also prefix placeholder if served by the app
+                gallery_data[album_dir]["cover_thumbnail_url"] = "/static/placeholder.png" # Assuming /static is served by the main app, outside /gallery
 
     print("Photo scan and thumbnail generation complete.")
     return gallery_data
 
-# --- Flask Routes ---
+# --- Flask Routes (now defined on the Blueprint) ---
 
 # Store gallery data globally after initial scan
 # This will be refreshed periodically or on demand in a real app,
@@ -159,23 +165,23 @@ app.gallery_data = {}
 
 # Call initial_scan directly during application startup.
 # No need for test_request_context here anymore as url_for is not used
-# during scan_photos_and_generate_thumbnails anymore.
+# during scan_photos_and_generate_thumbnails anymore (URLs are hardcoded).
 with app.app_context():
     app.gallery_data = scan_photos_and_generate_thumbnails()
 
 
-@app.route('/')
+@gallery_bp.route('/')
 def index():
     """Serves the main gallery page."""
     return render_template('index.html')
 
-@app.route('/album/<album_name>')
+@gallery_bp.route('/album/<album_name>')
 def album_page(album_name):
     """Serves a specific album page."""
     # This route is primarily for the client-side routing in JS to work
     return render_template('album.html', album_name=album_name)
 
-@app.route('/api/albums')
+@gallery_bp.route('/api/albums')
 def api_albums():
     """Returns a JSON list of all albums."""
     albums_list = []
@@ -189,7 +195,7 @@ def api_albums():
     albums_list.sort(key=lambda x: x['name'].lower())
     return jsonify(albums_list)
 
-@app.route('/api/album/<album_name>/photos')
+@gallery_bp.route('/api/album/<album_name>/photos')
 def api_album_photos(album_name):
     """Returns a JSON list of photos for a specific album."""
     album_data = app.gallery_data.get(album_name)
@@ -197,7 +203,7 @@ def api_album_photos(album_name):
         return jsonify(album_data["photos"])
     return jsonify({"error": "Album not found"}), 404
 
-@app.route('/photos/<path:filename>')
+@gallery_bp.route('/photos/<path:filename>')
 def serve_photo(filename):
     """Serves original photo files."""
     # Security note: Ensure filename cannot traverse directories (Flask's send_from_directory handles this well)
@@ -208,7 +214,7 @@ def serve_photo(filename):
         return "Album not found", 404
     return send_from_directory(full_path_to_album, photo_name)
 
-@app.route('/thumbnails/<path:filename>')
+@gallery_bp.route('/thumbnails/<path:filename>')
 def serve_thumbnail(filename):
     """Serves generated thumbnail files."""
     # The filename path here will include the album folder, e.g., 'album1/photo1.jpg'
@@ -218,53 +224,23 @@ def serve_thumbnail(filename):
         return "Thumbnail album not found", 404
     return send_from_directory(full_path_to_album_thumb, thumb_name)
 
+# Register the blueprint with the main Flask application
+app.register_blueprint(gallery_bp)
+
+# If you have static files for the main app (like a general favicon, or if you move placeholder.png outside /gallery)
+# You might still need a route for static files if they are not inside the blueprint's static_folder
+# However, if Flask is the only server and all assets are within the blueprint's scope, you don't need this.
+# For simplicity, if placeholder.png is in static/, ensure it's accessible.
+# The url_for('static', ...) in HTML will correctly find it if Flask's static_folder is default 'static'.
+
+
 # --- Main execution ---
 if __name__ == '__main__':
     # Ensure the photos and thumbnails directories exist
     app_config['PHOTOS_DIR'].mkdir(parents=True, exist_ok=True)
     app_config['THUMBNAILS_DIR'].mkdir(parents=True, exist_ok=True)
 
-    # You can populate the `photos` directory with some test images like this:
-    # Example: Create dummy photo files for testing
-    # For a real application, users would place their photos here.
-    # import shutil
-    # dummy_photo_dir = Path("./dummy_photos")
-    # dummy_photo_dir.mkdir(exist_ok=True)
-    # if not (dummy_photo_dir / "test_album").exists():
-    #     (dummy_photo_dir / "test_album").mkdir()
-    #     # Create some placeholder images if they don't exist
-    #     try:
-    #         from PIL import Image, ImageDraw
-    #         img1 = Image.new('RGB', (800, 600), color = 'red')
-    #         d1 = ImageDraw.Draw(img1)
-    #         d1.text((10,10), "Photo 1", fill=(255,255,0))
-    #         img1.save(dummy_photo_dir / "test_album" / "photo1.jpg")
-    #
-    #         img2 = Image.new('RGB', (1024, 768), color = 'blue')
-    #         d2 = ImageDraw.Draw(img2)
-    #         d2.text((10,10), "Photo 2", fill=(255,0,255))
-    #         img2.save(dummy_photo_dir / "test_album" / "photo2.png")
-    #
-    #         img3 = Image.new('RGB', (640, 480), color = 'green')
-    #         d3 = ImageDraw.Draw(img3)
-    #         d3.text((10,10), "Photo 3", fill=(0,255,255))
-    #         img3.save(dummy_photo_dir / "test_album" / "photo3.jpeg")
-    #
-    #         print("Dummy photos created in ./dummy_photos/test_album")
-    #     except ImportError:
-    #         print("Pillow not installed. Cannot create dummy images.")
-    #
-    # if not app_config['PHOTOS_DIR'].exists() or not list(app_config['PHOTOS_DIR'].iterdir()):
-    #     print(f"'{app_config['PHOTOS_DIR']}' is empty. You might want to copy dummy photos into it.")
-    #     if dummy_photo_dir.exists() and list(dummy_photo_dir.iterdir()):
-    #         print(f"Copying dummy photos from '{dummy_photo_dir}' to '{app_config['PHOTOS_DIR']}'...")
-    #         # Simple copy - be careful in production
-    #         for item in dummy_photo_dir.iterdir():
-    #             if item.is_dir():
-    #                 shutil.copytree(item, app_config['PHOTOS_DIR'] / item.name, dirs_exist_ok=True)
-    #             elif item.is_file():
-    #                 shutil.copy2(item, app_config['PHOTOS_DIR'] / item.name)
-
-
     print(f"Starting Flask app on http://127.0.0.1:{app_config['PORT']}")
     app.run(host='0.0.0.0', port=app_config['PORT'], debug=True)
+
+
