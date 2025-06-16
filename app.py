@@ -1,7 +1,7 @@
 # app.py
 import os
 import configparser
-from flask import Flask, render_template, send_from_directory, jsonify, url_for, Blueprint
+from flask import Flask, render_template, send_from_directory, jsonify, Blueprint
 from PIL import Image
 from pathlib import Path
 import threading
@@ -18,7 +18,7 @@ def load_config():
     config_file = 'config.ini'
     if not os.path.exists(config_file):
         print(f"Error: Configuration file '{config_file}' not found.")
-        print("Please create a config.ini with [Gallery] section and PHOTOS_DIR, THUMBNAILS_DIR, THUMBNAIL_SIZE, PORT.")
+        print("Please create a config.ini with [Gallery] section and PHOTOS_DIR, THUMBNAILS_DIR, THUMBNAIL_SIZE, PORT, BASE_URL_PREFIX.")
         exit(1)
 
     config = configparser.ConfigParser()
@@ -33,6 +33,13 @@ def load_config():
         app_config['THUMBNAILS_DIR'] = config['Gallery'].get('THUMBNAILS_DIR', './thumbnails')
         app_config['THUMBNAIL_SIZE'] = tuple(map(int, config['Gallery'].get('THUMBNAIL_SIZE', '200,200').split(',')))
         app_config['PORT'] = int(config['Gallery'].get('PORT', '5000'))
+        # New: Base URL Prefix
+        app_config['BASE_URL_PREFIX'] = config['Gallery'].get('BASE_URL_PREFIX', '/gallery').strip('/') # Remove trailing/leading slashes
+        if app_config['BASE_URL_PREFIX']:
+            app_config['BASE_URL_PREFIX'] = '/' + app_config['BASE_URL_PREFIX'] # Ensure it starts with a single slash
+        else:
+            app_config['BASE_URL_PREFIX'] = '' # For root deployment
+
     except ValueError as e:
         print(f"Error parsing configuration: {e}")
         exit(1)
@@ -49,9 +56,8 @@ load_config()
 # Initialize Flask app after config is loaded
 app = Flask(__name__)
 
-# --- Create a Blueprint for the gallery with a URL prefix ---
-# All routes defined on 'gallery_bp' will automatically be prefixed with '/gallery'.
-gallery_bp = Blueprint('gallery', __name__, url_prefix='/gallery')
+# --- Create a Blueprint for the gallery with a configurable URL prefix ---
+gallery_bp = Blueprint('gallery', __name__, url_prefix=app_config['BASE_URL_PREFIX'])
 
 # --- Thumbnail Generation Logic ---
 # Supported image extensions
@@ -92,6 +98,7 @@ def scan_photos_and_generate_thumbnails():
     photos_root = app_config['PHOTOS_DIR']
     thumbnails_root = app_config['THUMBNAILS_DIR']
     thumbnail_size = app_config['THUMBNAIL_SIZE']
+    base_url_prefix = app_config['BASE_URL_PREFIX'] # Get the prefix
 
     thumbnails_root.mkdir(parents=True, exist_ok=True)
 
@@ -106,8 +113,8 @@ def scan_photos_and_generate_thumbnails():
         current_dir_images = [f for f in filenames if is_image_file(f)]
 
         if current_dir_images: # Only consider directories that contain images as albums
-            print(f"Processing album: {album_name if album_name != '.' else 'root'}") # 'root' for base directory
-            
+            print(f"Processing album: {album_name if album_name != '.' else 'root'}")
+
             # Ensure the album entry exists in gallery_data, especially for root album
             if album_name not in gallery_data:
                 gallery_data[album_name] = {
@@ -128,10 +135,13 @@ def scan_photos_and_generate_thumbnails():
 
                 get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
 
-                # Construct URLs with the /gallery prefix and the full album_name path
-                # Flask's path converter will correctly handle slashes in filename
-                original_url = f"/gallery/photos/{album_name}/{photo_filename}" if album_name != '.' else f"/gallery/photos/{photo_filename}"
-                thumb_url = f"/gallery/thumbnails/{album_name}/{photo_filename}" if album_name != '.' else f"/gallery/thumbnails/{photo_filename}"
+                # Construct URLs for the frontend manually, now using the configurable base_url_prefix
+                # Handle root album ('.') case to avoid double slashes
+                original_url_segment = f"/photos/{album_name}/{photo_filename}" if album_name != '.' else f"/photos/{photo_filename}"
+                thumb_url_segment = f"/thumbnails/{album_name}/{photo_filename}" if album_name != '.' else f"/thumbnails/{photo_filename}"
+
+                original_url = base_url_prefix + original_url_segment
+                thumb_url = base_url_prefix + thumb_url_segment
 
                 album_photos.append({
                     "original_filename": photo_filename,
@@ -139,15 +149,15 @@ def scan_photos_and_generate_thumbnails():
                     "thumbnail_url": thumb_url
                 })
 
-            gallery_data[album_name]["photos"].extend(album_photos) # Use extend for collected photos
+            gallery_data[album_name]["photos"].extend(album_photos)
 
             # Set album cover: first photo's thumbnail in the album
             if not gallery_data[album_name]["cover_thumbnail_url"] and album_photos:
                  gallery_data[album_name]["cover_thumbnail_url"] = album_photos[0]["thumbnail_url"]
             elif not gallery_data[album_name]["cover_thumbnail_url"]:
-                # If no photos in album, use a placeholder
-                gallery_data[album_name]["cover_thumbnail_url"] = "/static/placeholder.png"
-
+                # If no photos in album, use a placeholder. Assuming placeholder.png is in static/
+                # If static/ is under the blueprint, adjust this path.
+                gallery_data[album_name]["cover_thumbnail_url"] = "/static/placeholder.png" # This assumes /static is at root, not prefixed. If your static files are also prefixed, change this to base_url_prefix + "/static/placeholder.png"
 
     # Clean up empty albums that might have been created but had no photos
     gallery_data = {k: v for k, v in gallery_data.items() if v["photos"]}
@@ -170,14 +180,14 @@ with app.app_context():
 @gallery_bp.route('/')
 def index():
     """Serves the main gallery page."""
-    return render_template('index.html')
+    # Pass the base_url_prefix to the template
+    return render_template('index.html', base_url_prefix=app_config['BASE_URL_PREFIX'])
 
-# Changed <album_name> to <path:album_name> to handle slashes in album names
 @gallery_bp.route('/album/<path:album_name>')
 def album_page(album_name):
     """Serves a specific album page."""
-    # This route is primarily for the client-side routing in JS to work
-    return render_template('album.html', album_name=album_name)
+    # Pass the base_url_prefix to the template
+    return render_template('album.html', album_name=album_name, base_url_prefix=app_config['BASE_URL_PREFIX'])
 
 @gallery_bp.route('/api/albums')
 def api_albums():
@@ -204,7 +214,6 @@ def api_album_photos(album_name):
         return jsonify(album_data["photos"])
     return jsonify({"error": "Album not found"}), 404
 
-# Changed <filename> to <path:filename> to handle full paths
 @gallery_bp.route('/photos/<path:filename>')
 def serve_photo(filename):
     """Serves original photo files. Filename now includes album subpaths."""
@@ -222,7 +231,6 @@ def serve_photo(filename):
 
     return send_from_directory(directory_to_serve_from, file_base_name)
 
-# Changed <filename> to <path:filename> to handle full paths
 @gallery_bp.route('/thumbnails/<path:filename>')
 def serve_thumbnail(filename):
     """Serves generated thumbnail files. Filename now includes album subpaths."""

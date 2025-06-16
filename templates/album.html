@@ -6,11 +6,15 @@
     <title>Album: {{ album_name }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <script>
+        // Set a global JavaScript variable for the base URL prefix
+        window.BASE_URL_PREFIX = "{{ base_url_prefix }}";
+    </script>
 </head>
 <body>
     <header class="header">
         <nav class="back-nav">
-            <a href="/gallery/" class="back-button">&larr; Back to Galleries</a>
+            <a href="{{ base_url_prefix }}/" class="back-button">&larr; Back to Galleries</a>
         </nav>
         <h1 class="header-title" id="album-title">Album: {{ album_name }}</h1>
     </header>
