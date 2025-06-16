@@ -157,13 +157,11 @@ def scan_photos_and_generate_thumbnails():
 # but for this lightweight example, we'll do it once at startup.
 app.gallery_data = {}
 
-@app.before_first_request
-def initial_scan():
-    """Performs the initial scan and thumbnail generation on app startup."""
+# Call initial_scan directly during application startup
+# This replaces the deprecated @app.before_first_request decorator
+with app.app_context():
     app.gallery_data = scan_photos_and_generate_thumbnails()
-    # In a production app, you might want a more sophisticated
-    # mechanism to detect new files or regenerate thumbnails,
-    # perhaps a periodic task or a webhook.
+
 
 @app.route('/')
 def index():
