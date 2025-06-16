@@ -126,9 +126,9 @@ def scan_photos_and_generate_thumbnails():
 
                     get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
 
-                    # Construct URLs for the frontend
-                    original_url = url_for('serve_photo', filename=f"{album_dir}/{photo_filename}")
-                    thumb_url = url_for('serve_thumbnail', filename=f"{album_dir}/{thumbnail_filename}")
+                    # Construct URLs for the frontend manually, as url_for requires a request context
+                    original_url = f"/photos/{album_dir}/{photo_filename}"
+                    thumb_url = f"/thumbnails/{album_dir}/{thumbnail_filename}"
 
                     album_photos.append({
                         "original_filename": photo_filename,
@@ -157,11 +157,11 @@ def scan_photos_and_generate_thumbnails():
 # but for this lightweight example, we'll do it once at startup.
 app.gallery_data = {}
 
-# Call initial_scan directly during application startup,
-# but within a test request context to allow url_for to function.
+# Call initial_scan directly during application startup.
+# No need for test_request_context here anymore as url_for is not used
+# during scan_photos_and_generate_thumbnails anymore.
 with app.app_context():
-    with app.test_request_context():
-        app.gallery_data = scan_photos_and_generate_thumbnails()
+    app.gallery_data = scan_photos_and_generate_thumbnails()
 
 
 @app.route('/')
