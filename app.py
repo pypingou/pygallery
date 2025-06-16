@@ -82,76 +82,75 @@ def get_or_create_thumbnail(image_path: Path, thumbnail_path: Path, size: tuple)
 
 def scan_photos_and_generate_thumbnails():
     """
-    Scans the PHOTOS_DIR for albums (subdirectories) and photos.
+    Scans the PHOTOS_DIR for albums (subdirectories) and photos, including nested ones.
     Generates thumbnails for new images found.
     Populates a global dictionary with gallery data.
     """
     print("Starting photo scan and thumbnail generation...")
-    # This dictionary will store our gallery data:
-    # {
-    #   "album_name": {
-    #       "cover_thumbnail_url": "...",
-    #       "photos": [
-    #           {"original_url": "...", "thumbnail_url": "..."},
-    #           ...
-    #       ]
-    #   },
-    #   ...
-    # }
     gallery_data = {}
 
     photos_root = app_config['PHOTOS_DIR']
     thumbnails_root = app_config['THUMBNAILS_DIR']
     thumbnail_size = app_config['THUMBNAIL_SIZE']
 
-    # Ensure the root thumbnail directory exists
     thumbnails_root.mkdir(parents=True, exist_ok=True)
 
-    # Walk through the photos directory to find albums and images
-    # We only care about immediate subdirectories as albums
-    for album_dir in os.listdir(photos_root):
-        album_path = photos_root / album_dir
-        if album_path.is_dir():
-            print(f"Processing album: {album_dir}")
-            gallery_data[album_dir] = {
-                "cover_thumbnail_url": "", # Will be set later
-                "photos": []
-            }
+    # Use os.walk to traverse all subdirectories
+    for dirpath, dirnames, filenames in os.walk(photos_root):
+        # Calculate the relative path from the base photos directory.
+        # This relative path will be our "album_name" which can include subdirectories.
+        relative_path = Path(dirpath).relative_to(photos_root)
+        album_name = str(relative_path).replace(os.sep, '/') # Use '/' for URLs
+
+        # Filter for actual image files in the current directory
+        current_dir_images = [f for f in filenames if is_image_file(f)]
+
+        if current_dir_images: # Only consider directories that contain images as albums
+            print(f"Processing album: {album_name if album_name != '.' else 'root'}") # 'root' for base directory
+            
+            # Ensure the album entry exists in gallery_data, especially for root album
+            if album_name not in gallery_data:
+                gallery_data[album_name] = {
+                    "cover_thumbnail_url": "",
+                    "photos": []
+                }
+
             album_photos = []
-            album_thumbnail_dir = thumbnails_root / album_dir
+            album_thumbnail_dir = thumbnails_root / relative_path
             album_thumbnail_dir.mkdir(parents=True, exist_ok=True)
 
-            # Find images within this album directory
-            for photo_filename in os.listdir(album_path):
-                photo_path = album_path / photo_filename
-                if photo_path.is_file() and is_image_file(photo_filename):
-                    thumbnail_filename = photo_filename # Keep same filename for thumbnail
-                    thumbnail_path = album_thumbnail_dir / thumbnail_filename
+            # Sort images to ensure consistent ordering
+            current_dir_images.sort(key=lambda x: x.lower())
 
-                    get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
+            for photo_filename in current_dir_images:
+                photo_path = Path(dirpath) / photo_filename
+                thumbnail_path = album_thumbnail_dir / photo_filename
 
-                    # Construct URLs for the frontend manually, now including the /gallery prefix
-                    # This is important because the Flask app now expects to serve from /gallery/
-                    original_url = f"/gallery/photos/{album_dir}/{photo_filename}"
-                    thumb_url = f"/gallery/thumbnails/{album_dir}/{thumbnail_filename}"
+                get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
 
-                    album_photos.append({
-                        "original_filename": photo_filename,
-                        "original_url": original_url,
-                        "thumbnail_url": thumb_url
-                    })
+                # Construct URLs with the /gallery prefix and the full album_name path
+                # Flask's path converter will correctly handle slashes in filename
+                original_url = f"/gallery/photos/{album_name}/{photo_filename}" if album_name != '.' else f"/gallery/photos/{photo_filename}"
+                thumb_url = f"/gallery/thumbnails/{album_name}/{photo_filename}" if album_name != '.' else f"/gallery/thumbnails/{photo_filename}"
 
-            # Sort photos by filename for consistent order
-            album_photos.sort(key=lambda x: x['original_filename'].lower())
-            gallery_data[album_dir]["photos"] = album_photos
+                album_photos.append({
+                    "original_filename": photo_filename,
+                    "original_url": original_url,
+                    "thumbnail_url": thumb_url
+                })
+
+            gallery_data[album_name]["photos"].extend(album_photos) # Use extend for collected photos
 
             # Set album cover: first photo's thumbnail in the album
-            if album_photos:
-                gallery_data[album_dir]["cover_thumbnail_url"] = album_photos[0]["thumbnail_url"]
-            else:
-                # If no photos in album, use a placeholder or default
-                # Also prefix placeholder if served by the app
-                gallery_data[album_dir]["cover_thumbnail_url"] = "/static/placeholder.png" # Assuming /static is served by the main app, outside /gallery
+            if not gallery_data[album_name]["cover_thumbnail_url"] and album_photos:
+                 gallery_data[album_name]["cover_thumbnail_url"] = album_photos[0]["thumbnail_url"]
+            elif not gallery_data[album_name]["cover_thumbnail_url"]:
+                # If no photos in album, use a placeholder
+                gallery_data[album_name]["cover_thumbnail_url"] = "/static/placeholder.png"
+
+
+    # Clean up empty albums that might have been created but had no photos
+    gallery_data = {k: v for k, v in gallery_data.items() if v["photos"]}
 
     print("Photo scan and thumbnail generation complete.")
     return gallery_data
@@ -164,8 +163,6 @@ def scan_photos_and_generate_thumbnails():
 app.gallery_data = {}
 
 # Call initial_scan directly during application startup.
-# No need for test_request_context here anymore as url_for is not used
-# during scan_photos_and_generate_thumbnails anymore (URLs are hardcoded).
 with app.app_context():
     app.gallery_data = scan_photos_and_generate_thumbnails()
 
@@ -175,7 +172,8 @@ def index():
     """Serves the main gallery page."""
     return render_template('index.html')
 
-@gallery_bp.route('/album/<album_name>')
+# Changed <album_name> to <path:album_name> to handle slashes in album names
+@gallery_bp.route('/album/<path:album_name>')
 def album_page(album_name):
     """Serves a specific album page."""
     # This route is primarily for the client-side routing in JS to work
@@ -185,17 +183,20 @@ def album_page(album_name):
 def api_albums():
     """Returns a JSON list of all albums."""
     albums_list = []
+    # Adjust how album names are handled for the root directory display
     for album_name, data in app.gallery_data.items():
+        display_name = album_name if album_name != '.' else 'Root Gallery'
         albums_list.append({
-            "name": album_name,
+            "name": album_name, # Actual album name (e.g., 'family/vacation')
+            "display_name": display_name, # Name to show in UI
             "cover_thumbnail_url": data["cover_thumbnail_url"],
             "photo_count": len(data["photos"])
         })
-    # Sort albums by name
-    albums_list.sort(key=lambda x: x['name'].lower())
+    # Sort albums by display name
+    albums_list.sort(key=lambda x: x['display_name'].lower())
     return jsonify(albums_list)
 
-@gallery_bp.route('/api/album/<album_name>/photos')
+@gallery_bp.route('/api/album/<path:album_name>/photos')
 def api_album_photos(album_name):
     """Returns a JSON list of photos for a specific album."""
     album_data = app.gallery_data.get(album_name)
@@ -203,35 +204,41 @@ def api_album_photos(album_name):
         return jsonify(album_data["photos"])
     return jsonify({"error": "Album not found"}), 404
 
+# Changed <filename> to <path:filename> to handle full paths
 @gallery_bp.route('/photos/<path:filename>')
 def serve_photo(filename):
-    """Serves original photo files."""
-    # Security note: Ensure filename cannot traverse directories (Flask's send_from_directory handles this well)
-    # The filename path here will include the album folder, e.g., 'album1/photo1.jpg'
-    album_name, photo_name = os.path.split(filename)
-    full_path_to_album = app_config['PHOTOS_DIR'] / album_name
-    if not full_path_to_album.exists():
-        return "Album not found", 404
-    return send_from_directory(full_path_to_album, photo_name)
+    """Serves original photo files. Filename now includes album subpaths."""
+    # Split the filename into directory parts and the actual file name
+    # The Path object handles cross-OS path separators internally
+    full_photo_path_in_root = app_config['PHOTOS_DIR'] / filename
 
+    if not full_photo_path_in_root.is_file():
+        return "Photo not found", 404
+
+    # send_from_directory needs the directory containing the file, and the file's base name
+    # So we split the full path into its directory and the actual file name
+    directory_to_serve_from = full_photo_path_in_root.parent
+    file_base_name = full_photo_path_in_root.name
+
+    return send_from_directory(directory_to_serve_from, file_base_name)
+
+# Changed <filename> to <path:filename> to handle full paths
 @gallery_bp.route('/thumbnails/<path:filename>')
 def serve_thumbnail(filename):
-    """Serves generated thumbnail files."""
-    # The filename path here will include the album folder, e.g., 'album1/photo1.jpg'
-    album_name, thumb_name = os.path.split(filename)
-    full_path_to_album_thumb = app_config['THUMBNAILS_DIR'] / album_name
-    if not full_path_to_album_thumb.exists():
-        return "Thumbnail album not found", 404
-    return send_from_directory(full_path_to_album_thumb, thumb_name)
+    """Serves generated thumbnail files. Filename now includes album subpaths."""
+    # Similar to serve_photo, reconstruct the full path in the thumbnails directory
+    full_thumbnail_path_in_root = app_config['THUMBNAILS_DIR'] / filename
+
+    if not full_thumbnail_path_in_root.is_file():
+        return "Thumbnail not found", 404
+
+    directory_to_serve_from = full_thumbnail_path_in_root.parent
+    file_base_name = full_thumbnail_path_in_root.name
+
+    return send_from_directory(directory_to_serve_from, file_base_name)
 
 # Register the blueprint with the main Flask application
 app.register_blueprint(gallery_bp)
-
-# If you have static files for the main app (like a general favicon, or if you move placeholder.png outside /gallery)
-# You might still need a route for static files if they are not inside the blueprint's static_folder
-# However, if Flask is the only server and all assets are within the blueprint's scope, you don't need this.
-# For simplicity, if placeholder.png is in static/, ensure it's accessible.
-# The url_for('static', ...) in HTML will correctly find it if Flask's static_folder is default 'static'.
 
 
 # --- Main execution ---
@@ -242,5 +249,4 @@ if __name__ == '__main__':
 
     print(f"Starting Flask app on http://127.0.0.1:{app_config['PORT']}")
     app.run(host='0.0.0.0', port=app_config['PORT'], debug=True)
-
 
