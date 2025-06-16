@@ -157,10 +157,11 @@ def scan_photos_and_generate_thumbnails():
 # but for this lightweight example, we'll do it once at startup.
 app.gallery_data = {}
 
-# Call initial_scan directly during application startup
-# This replaces the deprecated @app.before_first_request decorator
+# Call initial_scan directly during application startup,
+# but within a test request context to allow url_for to function.
 with app.app_context():
-    app.gallery_data = scan_photos_and_generate_thumbnails()
+    with app.test_request_context():
+        app.gallery_data = scan_photos_and_generate_thumbnails()
 
 
 @app.route('/')
