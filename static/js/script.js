@@ -3,6 +3,7 @@
 // Global variables for lightbox navigation
 let currentAlbumPhotos = []; // Stores the list of photos for the current album
 let currentPhotoIndex = 0; // Stores the index of the currently displayed photo
+let currentAlbumName = ''; // Stores the name of the currently viewed album
 
 document.addEventListener('DOMContentLoaded', () => {
     // Determine if we are on the main gallery page or an album page
@@ -11,10 +12,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pathname === '/gallery/' || pathname === '/gallery') {
         fetchAlbums();
     } else if (pathname.startsWith('/gallery/album/')) {
-        const albumName = pathname.split('/gallery/album/')[1];
-        if (albumName) {
-            document.getElementById('album-title').textContent = `Album: ${decodeURIComponent(albumName)}`;
-            fetchPhotos(albumName);
+        // Correctly extract and decode the album name from the URL path
+        // The path: converter in Flask handles the / as part of the path,
+        // so we need to make sure we're getting the raw path here.
+        const albumPathEncoded = pathname.split('/gallery/album/')[1];
+        // Decode it once to get the actual album path with slashes
+        currentAlbumName = decodeURIComponent(albumPathEncoded); // Store globally
+        if (currentAlbumName) {
+            // Update the album title to reflect the full path
+            document.getElementById('album-title').textContent = `Album: ${currentAlbumName.replace(/\//g, ' / ')}`; // Display with spaces for readability
+            fetchPhotos(currentAlbumName); // Fetch photos for the album
         }
     }
 
@@ -24,7 +31,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeBtn = document.querySelector('.close-btn');
     const prevBtn = document.getElementById('prev-photo-btn');
     const nextBtn = document.getElementById('next-photo-btn');
-    const downloadBtn = document.getElementById('download-photo-btn'); // Get download button
+    const downloadBtn = document.getElementById('download-photo-btn');
+    const shareBtn = document.getElementById('share-photo-btn'); // New: Get share button
+    const messageBox = document.getElementById('message-box'); // New: Get message box
+
 
     closeBtn.addEventListener('click', (event) => {
         event.stopPropagation(); // Prevent click from bubbling to lightbox overlay
@@ -53,6 +63,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // New: Add event listener for share button
+    if (shareBtn) {
+        shareBtn.addEventListener('click', (event) => {
+            event.stopPropagation(); // Prevent closing lightbox
+            copyShareLink();
+        });
+    }
 
     // Close lightbox when clicking directly on the overlay (not image or buttons)
     lightbox.addEventListener('click', (event) => {
@@ -97,6 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
             lightboxImg.src = ''; // Clear image src
             currentAlbumPhotos = []; // Clear stored photos
             currentPhotoIndex = 0; // Reset index
+            currentAlbumName = ''; // Reset album name
         }, 300); // Match CSS transition duration
     };
 
@@ -150,6 +168,69 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.removeChild(a); // Clean up
         }
     }
+
+    // New: Function to copy shareable link to clipboard
+    function copyShareLink() {
+        if (currentAlbumPhotos.length > 0 && currentAlbumName) {
+            const photo = currentAlbumPhotos[currentPhotoIndex];
+            // Construct the shareable URL: current album page + ?image=filename
+            const shareUrl = `${window.location.origin}/gallery/album/${currentAlbumName}?image=${encodeURIComponent(photo.original_filename)}`;
+
+            // Create a temporary input element to copy the text
+            const tempInput = document.createElement('input');
+            tempInput.value = shareUrl;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy'); // Use execCommand for broader compatibility in iframes
+            document.body.removeChild(tempInput);
+
+            // Show confirmation message
+            if (messageBox) {
+                messageBox.textContent = 'Link copied to clipboard!';
+                messageBox.classList.add('show');
+                setTimeout(() => {
+                    messageBox.classList.remove('show');
+                }, 3000); // Hide after 3 seconds
+            }
+        }
+    }
+
+
+    // New: Function to parse URL parameters
+    function getUrlParameter(name) {
+        name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
+        var regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
+        var results = regex.exec(location.search);
+        return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
+    }
+
+
+    // Initial check for image parameter on album page load
+    async function initializeAlbumPage() {
+        // Ensure currentAlbumName is set from the URL before fetching photos
+        // This part is already handled by the initial DOMContentLoaded check
+
+        if (currentAlbumName) { // Only proceed if on an album page
+            await fetchPhotos(currentAlbumName); // Make sure photos are fetched first
+
+            const imageUrlParam = getUrlParameter('image');
+            if (imageUrlParam) {
+                // Find the index of the image
+                const foundIndex = currentAlbumPhotos.findIndex(photo => photo.original_filename === imageUrlParam);
+                if (foundIndex !== -1) {
+                    openLightbox(foundIndex, currentAlbumPhotos);
+                } else {
+                    console.warn(`Image '${imageUrlParam}' not found in album '${currentAlbumName}'.`);
+                }
+            }
+        }
+    }
+
+    // Call initializeAlbumPage after DOMContentLoaded to ensure elements are ready
+    // This is essentially the last step in the DOMContentLoaded logic for album pages.
+    if (pathname.startsWith('/gallery/album/')) {
+        initializeAlbumPage();
+    }
 });
 
 
@@ -175,12 +256,13 @@ async function fetchAlbums() {
         albums.forEach(album => {
             const albumCard = document.createElement('a'); // Use <a> for navigation
             // Updated album href to include /gallery prefix
-            albumCard.href = `/gallery/album/${encodeURIComponent(album.name)}`; // Encode for URL safety
+            // Use album.name directly as it's already encoded by Flask's url_for or manually correctly formatted
+            albumCard.href = `/gallery/album/${album.name}`; // Album name can contain slashes, which Flask's path converter expects.
             albumCard.classList.add('album-card');
 
             const albumImg = document.createElement('img');
             albumImg.src = album.cover_thumbnail_url;
-            albumImg.alt = `Cover for ${album.name}`;
+            albumImg.alt = `Cover for ${album.display_name}`; // Use display_name for alt text
             albumImg.classList.add('album-card-img');
             // Add error handling for image loading
             albumImg.onerror = () => {
@@ -192,7 +274,8 @@ async function fetchAlbums() {
 
             const albumTitle = document.createElement('h2');
             albumTitle.classList.add('album-card-title');
-            albumTitle.textContent = album.name;
+            albumTitle.textContent = album.display_name; // Use display_name for UI
+            albumTitle.title = album.name; // Add full path as tooltip
 
             const photoCount = document.createElement('p');
             photoCount.classList.add('album-card-count');
@@ -210,13 +293,15 @@ async function fetchAlbums() {
     }
 }
 
-async function fetchPhotos(albumName) {
+async function fetchPhotos(albumName) { // albumName here is already decoded
     const photoGridDiv = document.getElementById('photo-grid');
     photoGridDiv.innerHTML = 'Loading photos...';
 
     try {
         // Updated API endpoint to include /gallery prefix
-        const response = await fetch(`/gallery/api/album/${encodeURIComponent(albumName)}/photos`);
+        // albumName is ALREADY decoded at this point, it should be sent as is
+        // encodeURIComponent here would double-encode, breaking paths like 'Family/Vacation/Paris'
+        const response = await fetch(`/gallery/api/album/${albumName}/photos`); // Removed encodeURIComponent here
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -254,9 +339,11 @@ async function fetchPhotos(albumName) {
 
             photoGridDiv.appendChild(photoThumbnailDiv);
         });
+        return photos; // Return photos for use in initializeAlbumPage
     } catch (error) {
         console.error(`Error fetching photos for album ${albumName}:`, error);
         photoGridDiv.innerHTML = `<p style="text-align: center; width: 100%; color: red;">Failed to load photos: ${error.message}</p>`;
+        return []; // Return empty array on error
     }
 }
 

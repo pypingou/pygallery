@@ -268,12 +268,19 @@ body {
     right: 20px; /* Position on the right */
 }
 
-/* New: Download button styles */
-.download-btn {
+/* New: Container for bottom controls (Download, Share) */
+.lightbox-controls-bottom {
     position: absolute;
-    bottom: 20px; /* Position at the bottom */
+    bottom: 20px;
     left: 50%;
-    transform: translateX(-50%); /* Center horizontally */
+    transform: translateX(-50%);
+    display: flex; /* Use flex to arrange buttons horizontally */
+    gap: 15px; /* Space between buttons */
+    z-index: 1001;
+}
+
+/* Download and Share button base styles */
+.download-btn, .share-btn {
     background-color: var(--accent-color);
     color: white;
     border: none;
@@ -281,14 +288,34 @@ body {
     padding: 10px 20px;
     font-size: 1rem;
     cursor: pointer;
-    z-index: 1001;
     transition: background-color 0.3s ease, transform 0.2s ease;
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
-.download-btn:hover {
+.download-btn:hover, .share-btn:hover {
     background-color: #0056b3;
-    transform: translateX(-50%) translateY(-2px); /* Lift slightly on hover */
+    transform: translateY(-2px); /* Lift slightly on hover */
+}
+
+/* New: Message box styles */
+.message-box {
+    position: fixed; /* Fixed position relative to viewport */
+    bottom: 100px; /* Above the footer and controls */
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    z-index: 1002; /* Above other lightbox elements */
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.message-box.show {
+    opacity: 1;
+    visibility: visible;
 }
 
 
@@ -340,10 +367,18 @@ body {
         font-size: 40px; /* Smaller on smaller screens */
         padding: 0 10px;
     }
-    .download-btn {
+    .lightbox-controls-bottom {
         bottom: 15px;
+        gap: 10px;
+    }
+    .download-btn, .share-btn {
         padding: 8px 15px;
         font-size: 0.9rem;
+    }
+    .message-box {
+        bottom: 80px;
+        font-size: 0.9rem;
+        padding: 8px 15px;
     }
 }
 
@@ -379,10 +414,18 @@ body {
         font-size: 30px; /* Even smaller on very small screens */
         padding: 0 5px;
     }
-    .download-btn {
+    .lightbox-controls-bottom {
         bottom: 10px;
+        gap: 8px;
+    }
+    .download-btn, .share-btn {
         padding: 6px 12px;
         font-size: 0.8rem;
+    }
+    .message-box {
+        bottom: 60px;
+        font-size: 0.8rem;
+        padding: 6px 12px;
     }
 }
 
