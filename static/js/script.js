@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeBtn = document.querySelector('.close-btn');
     const prevBtn = document.getElementById('prev-photo-btn');
     const nextBtn = document.getElementById('next-photo-btn');
+    const downloadBtn = document.getElementById('download-photo-btn'); // New: Get download button
 
     closeBtn.addEventListener('click', (event) => {
         event.stopPropagation(); // Prevent click from bubbling to lightbox overlay
@@ -40,6 +41,14 @@ document.addEventListener('DOMContentLoaded', () => {
         nextBtn.addEventListener('click', (event) => {
             event.stopPropagation(); // Prevent closing lightbox
             showNextPhoto();
+        });
+    }
+
+    // New: Add event listener for download button
+    if (downloadBtn) {
+        downloadBtn.addEventListener('click', (event) => {
+            event.stopPropagation(); // Prevent closing lightbox
+            downloadCurrentImage();
         });
     }
 
@@ -99,6 +108,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // Show/hide navigation buttons based on current index
             prevBtn.style.display = (currentPhotoIndex > 0) ? 'flex' : 'none';
             nextBtn.style.display = (currentPhotoIndex < currentAlbumPhotos.length - 1) ? 'flex' : 'none';
+
+            // Update download button's download attribute
+            if (downloadBtn) {
+                // The download attribute suggests a filename
+                downloadBtn.setAttribute('download', photo.original_filename);
+            }
         }
     }
 
@@ -113,6 +128,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentPhotoIndex > 0) {
             currentPhotoIndex--;
             updateLightboxImage();
+        }
+    }
+
+    // New: Function to trigger image download
+    function downloadCurrentImage() {
+        if (currentAlbumPhotos.length > 0) {
+            const photo = currentAlbumPhotos[currentPhotoIndex];
+            const imageUrl = photo.original_url;
+            const filename = photo.original_filename;
+
+            // Create a temporary anchor element
+            const a = document.createElement('a');
+            a.href = imageUrl;
+            a.download = filename; // Set the desired filename for download
+
+            // Programmatically click the anchor element to trigger download
+            document.body.appendChild(a); // Append to body is required for Firefox
+            a.click();
+            document.body.removeChild(a); // Clean up
         }
     }
 });

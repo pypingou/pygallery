@@ -239,7 +239,7 @@ body {
     cursor: pointer;
 }
 
-/* New: Lightbox Navigation Buttons */
+/* Lightbox Navigation Buttons */
 .lightbox-nav-btn {
     position: absolute;
     top: 50%;
@@ -266,6 +266,29 @@ body {
 
 .next-btn {
     right: 20px; /* Position on the right */
+}
+
+/* New: Download button styles */
+.download-btn {
+    position: absolute;
+    bottom: 20px; /* Position at the bottom */
+    left: 50%;
+    transform: translateX(-50%); /* Center horizontally */
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 1rem;
+    cursor: pointer;
+    z-index: 1001;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.download-btn:hover {
+    background-color: #0056b3;
+    transform: translateX(-50%) translateY(-2px); /* Lift slightly on hover */
 }
 
 
@@ -317,6 +340,11 @@ body {
         font-size: 40px; /* Smaller on smaller screens */
         padding: 0 10px;
     }
+    .download-btn {
+        bottom: 15px;
+        padding: 8px 15px;
+        font-size: 0.9rem;
+    }
 }
 
 @media (max-width: 480px) {
@@ -351,11 +379,10 @@ body {
         font-size: 30px; /* Even smaller on very small screens */
         padding: 0 5px;
     }
-    .prev-btn {
-        left: 10px;
-    }
-    .next-btn {
-        right: 10px;
+    .download-btn {
+        bottom: 10px;
+        padding: 6px 12px;
+        font-size: 0.8rem;
     }
 }
 
