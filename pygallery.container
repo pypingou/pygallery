@@ -17,9 +17,9 @@ Image=localhost/my-photo-gallery:latest
 Volume=/home/user/my_gallery_photos:/app/photos:Z
 Volume=/home/user/my_gallery_thumbnails:/app/thumbnails:Z
 
-# Expose the container's port 5000 to the host's port 80.
-# Change "80" if you want to use a different host port (e.g., 8000:5000).
-PublishPort=80:5000
+# Expose the container's port 5000 to the host's port 8000.
+# Since Apache is likely using port 80, we'll use port 8000 for the gallery directly.
+PublishPort=8000:5000
 
 # Automatically restart the container if it exits with a non-zero status
 # OnFailure will restart only if it fails (not on clean exit), unless you set Always.
