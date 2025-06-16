@@ -1,0 +1,276 @@
+/* static/css/style.css */
+
+:root {
+    --primary-bg: #f8f9fa;
+    --secondary-bg: #ffffff;
+    --text-color: #343a40;
+    --accent-color: #007bff;
+    --border-color: #dee2e6;
+    --shadow-color: rgba(0, 0, 0, 0.1);
+    --hover-shadow-color: rgba(0, 0, 0, 0.2);
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: var(--primary-bg);
+    color: var(--text-color);
+    line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh; /* Ensure body takes full viewport height */
+}
+
+.header {
+    background-color: var(--secondary-bg);
+    padding: 1.5rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: 0 2px 4px var(--shadow-color);
+    text-align: center;
+    position: relative;
+}
+
+.header-title {
+    margin: 0;
+    color: var(--text-color);
+    font-size: 2rem;
+    font-weight: 600;
+}
+
+.back-nav {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.back-button {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background-color: var(--accent-color);
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    box-shadow: 0 2px 4px var(--shadow-color);
+}
+
+.back-button:hover {
+    background-color: #0056b3;
+    transform: translateY(-2px);
+}
+
+.container {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    flex-grow: 1; /* Allows content to push footer down */
+}
+
+.grid-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 20px;
+    justify-content: center;
+    padding-bottom: 2rem; /* Add some padding at the bottom */
+}
+
+/* Album Card Styles */
+.album-card {
+    background-color: var(--secondary-bg);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 8px var(--shadow-color);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    cursor: pointer;
+    text-decoration: none; /* For the <a> tag usage */
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+}
+
+.album-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px var(--hover-shadow-color);
+}
+
+.album-card-img {
+    width: 100%;
+    height: 180px; /* Fixed height for consistent look */
+    object-fit: cover; /* Cover the area, cropping if necessary */
+    border-bottom: 1px solid var(--border-color);
+}
+
+.album-card-info {
+    padding: 1rem;
+    text-align: center;
+    flex-grow: 1; /* Allow info section to take available space */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.album-card-title {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--accent-color);
+    word-break: break-word; /* Break long names */
+}
+
+.album-card-count {
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+/* Photo Thumbnail Styles */
+.photo-thumbnail {
+    background-color: var(--secondary-bg);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 8px var(--shadow-color);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    cursor: pointer;
+    display: block; /* Ensure it behaves like a block element for image centering */
+    text-align: center; /* For centering the image horizontally */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 220px; /* Fixed height to accommodate 200x200 thumbnails plus padding */
+    padding: 10px; /* Padding inside the card */
+    box-sizing: border-box; /* Include padding in the element's total width and height */
+}
+
+.photo-thumbnail:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px var(--hover-shadow-color);
+}
+
+.photo-thumbnail img {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 8px; /* Slightly rounded corners for thumbnails */
+    object-fit: contain; /* Ensure the entire thumbnail is visible without cropping */
+    display: block; /* Remove extra space below image */
+}
+
+
+/* Lightbox Modal Styles */
+.lightbox {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 1000; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgba(0,0,0,0.9); /* Black w/ opacity */
+    justify-content: center;
+    align-items: center;
+    padding: 20px; /* Padding around the content */
+    box-sizing: border-box;
+}
+
+.lightbox-content {
+    margin: auto;
+    display: block;
+    max-width: 90vw; /* Max width relative to viewport */
+    max-height: 90vh; /* Max height relative to viewport */
+    object-fit: contain; /* Ensure the entire image fits */
+    border-radius: 8px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    transform: scale(0.8); /* Start smaller for animation */
+    opacity: 0;
+    transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+}
+
+.lightbox.active .lightbox-content {
+    transform: scale(1);
+    opacity: 1;
+}
+
+.close-btn {
+    position: absolute;
+    top: 20px;
+    right: 35px;
+    color: #f1f1f1;
+    font-size: 40px;
+    font-weight: bold;
+    transition: 0.3s;
+    cursor: pointer;
+    z-index: 1001; /* Ensure close button is above image */
+    background-color: rgba(0,0,0,0.5);
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.close-btn:hover,
+.close-btn:focus {
+    color: #bbb;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .header-title {
+        font-size: 1.7rem;
+    }
+    .back-nav {
+        position: static;
+        transform: none;
+        margin-bottom: 1rem;
+        text-align: left;
+    }
+    .container {
+        margin-top: 1rem;
+    }
+    .grid-container {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 15px;
+    }
+    .album-card-img, .photo-thumbnail {
+        height: 150px;
+    }
+    .close-btn {
+        top: 10px;
+        right: 10px;
+        font-size: 30px;
+        width: 40px;
+        height: 40px;
+    }
+}
+
+@media (max-width: 480px) {
+    .header {
+        padding: 1rem 0.5rem;
+    }
+    .header-title {
+        font-size: 1.5rem;
+    }
+    .back-button {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.8rem;
+    }
+    .grid-container {
+        grid-template-columns: 1fr; /* Single column on very small screens */
+        gap: 10px;
+    }
+    .album-card-img, .photo-thumbnail {
+        height: 120px;
+    }
+    .album-card-title {
+        font-size: 1.1rem;
+    }
+    .album-card-count {
+        font-size: 0.8rem;
+    }
+}
+

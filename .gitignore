@@ -24,3 +24,6 @@ coverage.xml
 
 # Ignore pipenv
 Pipfile
+
+# Ignore Photos directory
+photos/
