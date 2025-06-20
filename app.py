@@ -1,7 +1,7 @@
 # app.py
 import os
 import configparser
-from flask import Flask, render_template, send_from_directory, jsonify, Blueprint, url_for
+from flask import Flask, render_template, send_from_directory, jsonify, Blueprint, url_for, request
 from PIL import Image
 from pathlib import Path
 import threading
@@ -35,9 +35,10 @@ def load_config():
         app_config['THUMBNAIL_SIZE'] = tuple(map(int, config['Gallery'].get('THUMBNAIL_SIZE', '200,200').split(',')))
         app_config['PORT'] = int(config['Gallery'].get('PORT', '5000'))
         # New: Base URL Prefix
-        app_config['BASE_URL_PREFIX'] = config['Gallery'].get('BASE_URL_PREFIX', '/gallery').strip('/') # Remove trailing/leading slashes
-        if app_config['BASE_URL_PREFIX']:
-            app_config['BASE_URL_PREFIX'] = '/' + app_config['BASE_URL_PREFIX'] # Ensure it starts with a single slash
+        # Get from config, strip slashes, and ensure it starts with one (unless empty)
+        base_url_prefix_raw = config['Gallery'].get('BASE_URL_PREFIX', '/gallery').strip('/')
+        if base_url_prefix_raw:
+            app_config['BASE_URL_PREFIX'] = '/' + base_url_prefix_raw
         else:
             app_config['BASE_URL_PREFIX'] = '' # For root deployment
 
@@ -55,12 +56,13 @@ def load_config():
 load_config()
 
 # Initialize Flask app
-# static_url_path is explicitly set to include the BASE_URL_PREFIX
-# This tells Flask's default static handler to serve files from <BASE_URL_PREFIX>/static/
+# NEW: static_url_path is explicitly set on the main Flask app constructor
+# This tells Flask's built-in static handler where its files are served from,
+# relative to the domain root (e.g., /gallery/static).
 app = Flask(__name__, static_url_path=app_config['BASE_URL_PREFIX'] + '/static')
 
 # --- Set APPLICATION_ROOT for Flask's internal URL generation ---
-# This is crucial for Flask to correctly build URLs when deployed at a subpath.
+# This tells Flask its base URL path from its own perspective.
 app.config['APPLICATION_ROOT'] = app_config['BASE_URL_PREFIX'] if app_config['BASE_URL_PREFIX'] else '/'
 
 # --- Apply ProxyFix to the Flask application ---
@@ -74,8 +76,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_prefix=1, x_proto=1)
 
 
 # --- Create a Blueprint for the gallery with a configurable URL prefix ---
-# static_folder and static_url_path are NOT set on the Blueprint.
-# Flask's main app static handler will serve files based on its static_url_path (set above)
+# Static files are now handled by the main app's static_url_path configuration.
 gallery_bp = Blueprint('gallery', __name__,
                        url_prefix=app_config['BASE_URL_PREFIX'],
                        template_folder='templates') # Explicitly set template folder for blueprint
@@ -119,56 +120,67 @@ def scan_photos_and_generate_thumbnails():
     photos_root = app_config['PHOTOS_DIR']
     thumbnails_root = app_config['THUMBNAILS_DIR']
     thumbnail_size = app_config['THUMBNAIL_SIZE']
-    base_url_prefix = app_config['BASE_URL_PREFIX'] # Get the prefix
-
+    
     thumbnails_root.mkdir(parents=True, exist_ok=True)
 
-    # No longer using app.test_request_context for URL generation here
-    # as we are manually constructing URLs for the initial scan.
-    for dirpath, dirnames, filenames in os.walk(photos_root):
-        relative_path = Path(dirpath).relative_to(photos_root)
-        album_name = str(relative_path).replace(os.sep, '/')
+    # Create a dummy request context to allow url_for to work during scan,
+    # simulating a request that has passed through the proxy and ProxyFix.
+    # The SCRIPT_NAME and URL scheme are crucial here.
+    with app.test_request_context(
+        path=app_config['BASE_URL_PREFIX'] + '/',
+        base_url='https://localhost' + app_config['BASE_URL_PREFIX'], # Simulate HTTPS external URL
+        url_scheme='https' # Simulate HTTPS
+    ):
+        # The SCRIPT_NAME will be automatically set by ProxyFix based on base_url,
+        # or can be set manually for test context if base_url alone is insufficient.
+        # request.environ['SCRIPT_NAME'] = app_config['BASE_URL_PREFIX'] # This line is often not needed if base_url is well-formed
 
-        current_dir_images = [f for f in filenames if is_image_file(f)]
 
-        if current_dir_images:
-            print(f"Processing album: {album_name if album_name != '.' else 'root'}")
+        for dirpath, dirnames, filenames in os.walk(photos_root):
+            relative_path = Path(dirpath).relative_to(photos_root)
+            album_name = str(relative_path).replace(os.sep, '/')
 
-            if album_name not in gallery_data:
-                gallery_data[album_name] = {
-                    "cover_thumbnail_url": "",
-                    "photos": []
-                }
+            current_dir_images = [f for f in filenames if is_image_file(f)]
 
-            album_photos = []
-            album_thumbnail_dir = thumbnails_root / relative_path
-            album_thumbnail_dir.mkdir(parents=True, exist_ok=True)
+            if current_dir_images:
+                print(f"Processing album: {album_name if album_name != '.' else 'root'}")
 
-            current_dir_images.sort(key=lambda x: x.lower())
+                if album_name not in gallery_data:
+                    gallery_data[album_name] = {
+                        "cover_thumbnail_url": "",
+                        "photos": []
+                    }
 
-            for photo_filename in current_dir_images:
-                photo_path = Path(dirpath) / photo_filename
-                thumbnail_path = album_thumbnail_dir / photo_filename
+                album_photos = []
+                album_thumbnail_dir = thumbnails_root / relative_path
+                album_thumbnail_dir.mkdir(parents=True, exist_ok=True)
 
-                get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
+                current_dir_images.sort(key=lambda x: x.lower())
 
-                # Reverted to manual URL construction for initial scan
-                original_url = f"{base_url_prefix}/photos/{album_name}/{photo_filename}" if album_name != '.' else f"{base_url_prefix}/photos/{photo_filename}"
-                thumb_url = f"{base_url_prefix}/thumbnails/{album_name}/{photo_filename}" if album_name != '.' else f"{base_url_prefix}/thumbnails/{photo_filename}"
+                for photo_filename in current_dir_images:
+                    photo_path = Path(dirpath) / photo_filename
+                    thumbnail_path = album_thumbnail_dir / photo_filename
 
-                album_photos.append({
-                    "original_filename": photo_filename,
-                    "original_url": original_url,
-                    "thumbnail_url": thumb_url
-                })
+                    get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
 
-            gallery_data[album_name]["photos"].extend(album_photos)
+                    # Use url_for for robustness with blueprint endpoints
+                    original_url = url_for('gallery.serve_photo', filename=f"{album_name}/{photo_filename}" if album_name != '.' else photo_filename)
+                    thumb_url = url_for('gallery.serve_thumbnail', filename=f"{album_name}/{photo_filename}" if album_name != '.' else photo_filename)
 
-            if not gallery_data[album_name]["cover_thumbnail_url"] and album_photos:
-                 gallery_data[album_name]["cover_thumbnail_url"] = album_photos[0]["thumbnail_url"]
-            elif not gallery_data[album_name]["cover_thumbnail_url"]:
-                # Reverted to manual URL construction for placeholder image
-                gallery_data[album_name]["cover_thumbnail_url"] = f"{base_url_prefix}/static/placeholder.png"
+                    album_photos.append({
+                        "original_filename": photo_filename,
+                        "original_url": original_url,
+                        "thumbnail_url": thumb_url
+                    })
+
+                gallery_data[album_name]["photos"].extend(album_photos)
+
+                if not gallery_data[album_name]["cover_thumbnail_url"] and album_photos:
+                     gallery_data[album_name]["cover_thumbnail_url"] = album_photos[0]["thumbnail_url"]
+                elif not gallery_data[album_name]["cover_thumbnail_url"]:
+                    # Use url_for for placeholder image (Flask's default static endpoint)
+                    # This will be generated relative to APPLICATION_ROOT and static_url_path.
+                    gallery_data[album_name]["cover_thumbnail_url"] = url_for('static', filename='placeholder.png')
 
     # Clean up empty albums that might have been created but had no photos
     gallery_data = {k: v for k, v in gallery_data.items() if v["photos"]}
@@ -182,16 +194,13 @@ def scan_photos_and_generate_thumbnails():
 app.gallery_data = {}
 
 # Call initial_scan directly during application startup.
-# The app.test_request_context is no longer needed around this call
-# because scan_photos_and_generate_thumbnails no longer uses url_for.
+# This happens in the app context, where APPLICATION_ROOT is defined.
 app.gallery_data = scan_photos_and_generate_thumbnails()
 
 
 @gallery_bp.route('/')
 def index():
     """Serves the main gallery page."""
-    # url_for('static', ...) and url_for('gallery.index') will work correctly
-    # because APPLICATION_ROOT and ProxyFix are set on the app instance.
     return render_template('index.html')
 
 @gallery_bp.route('/album/<path:album_name>')
@@ -257,6 +266,22 @@ if __name__ == '__main__':
     # Ensure the photos and thumbnails directories exist
     app_config['PHOTOS_DIR'].mkdir(parents=True, exist_ok=True)
     app_config['THUMBNAILS_DIR'].mkdir(parents=True, exist_ok=True)
+
+    # In a local development environment, establish a test request context
+    # to allow url_for to generate correct URLs during initial scan and direct runs.
+    # This simulates the environment Gunicorn would provide when deployed.
+    with app.test_request_context(
+        path=app_config['BASE_URL_PREFIX'] + '/',
+        base_url='http://localhost:' + str(app_config['PORT']), # Only define host and port once
+        url_scheme='http'
+    ):
+        # Explicitly set SCRIPT_NAME in the test context if not already derived from path
+        request.environ['SCRIPT_NAME'] = app_config['BASE_URL_PREFIX']
+
+        # Call scan_photos_and_generate_thumbnails inside the context
+        # This will populate app.gallery_data with correctly formed URLs
+        # (relative to SCRIPT_NAME, with http scheme in dev).
+        app.gallery_data = scan_photos_and_generate_thumbnails() # Moved inside context
 
     print(f"Starting Flask app on http://127.0.0.1:{app_config['PORT']}")
     app.run(host='0.0.0.0', port=app_config['PORT'], debug=True)
