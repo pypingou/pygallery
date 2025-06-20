@@ -27,6 +27,12 @@ EXPOSE ${FLASK_PORT}
 # IMPORTANT: The SCRIPT_NAME environment variable should match BASE_URL_PREFIX from config.ini
 # This tells Gunicorn (and thus Flask) the application's mount point.
 # '--forwarded-allow-ips "*"' tells Gunicorn to trust X-Forwarded-* headers from any proxy.
-# NEW: Wrap the command in 'sh -c' to ensure environment variable expansion.
-# This ensures SCRIPT_NAME gets the actual value from BASE_URL_PREFIX.
-CMD ["sh", "-c", "gunicorn -b 0.0.0.0:5000 --workers 4 --timeout 120 --access-logfile - --error-logfile - --forwarded-allow-ips \"*\" --env SCRIPT_NAME=${BASE_URL_PREFIX} app:app"]
+CMD ["gunicorn", \
+     "-b", "0.0.0.0:5000", \
+     "--workers", "4", \
+     "--timeout", "120", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "--forwarded-allow-ips", "*", \
+     "app:app"]
+
