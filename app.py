@@ -87,6 +87,8 @@ def get_or_create_thumbnail(image_path: Path, thumbnail_path: Path, size: tuple)
     except Exception as e:
         print(f"Error generating thumbnail for {image_path}: {e}")
 
+# IMPORTANT: base_url_prefix is NOT used directly for URL construction in this function anymore.
+# We rely on url_for within a test_request_context for correct URL generation.
 def scan_photos_and_generate_thumbnails():
     """
     Scans the PHOTOS_DIR for albums and photos.
@@ -102,17 +104,17 @@ def scan_photos_and_generate_thumbnails():
     
     thumbnails_root.mkdir(parents=True, exist_ok=True)
 
-    # NEW: Create a test request context that simulates what ProxyFix will provide
-    # when the app is deployed behind a proxy.
-    # Internally, the app runs at '/'. External prefix is handled by ProxyFix/Apache.
+    # Re-introducing test_request_context around the scan_photos_and_generate_thumbnails logic
+    # within the app.py's main execution block. This ensures url_for works at startup.
+    # The parameters for base_url and url_scheme are set to simulate the deployed environment
+    # where Flask runs internally at '/' and Apache handles external prefix/HTTPS.
+    # SCRIPT_NAME will be effectively '/' for url_for in this context.
     with app.test_request_context(
-        path='/', # The internal path is '/'
-        base_url='http://localhost:' + str(app_config['PORT']) # Simulate local dev server base URL
+        path='/', # The internal path that Flask sees
+        base_url=f"{os.environ.get('wsgi.url_scheme', 'http')}://{os.environ.get('SERVER_NAME', 'localhost')}:{os.environ.get('SERVER_PORT', '5000')}"
     ):
-        # Explicitly set SCRIPT_NAME in the test context. This is how Flask knows
-        # its "external" root. When deployed, ProxyFix sets this from X-Forwarded-Prefix.
-        # For local test, we use '/' as the app runs internally at root.
-        request.environ['SCRIPT_NAME'] = '/' # App's internal script name is '/'
+        # Ensure SCRIPT_NAME is set to '/' for internal routing within the test context
+        request.environ['SCRIPT_NAME'] = '/'
 
 
         for dirpath, dirnames, filenames in os.walk(photos_root):
@@ -142,8 +144,7 @@ def scan_photos_and_generate_thumbnails():
 
                     get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
 
-                    # Now url_for generates URLs relative to the internal app root ('/')
-                    # e.g., /photos/album_name/filename.jpg, /static/css/style.css
+                    # NEW: Use url_for directly. It will build URLs relative to the app's internal root ('/')
                     original_url = url_for('gallery.serve_photo', filename=f"{album_name}/{photo_filename}" if album_name != '.' else photo_filename)
                     thumb_url = url_for('gallery.serve_thumbnail', filename=f"{album_name}/{photo_filename}" if album_name != '.' else photo_filename)
 
@@ -158,7 +159,7 @@ def scan_photos_and_generate_thumbnails():
                 if not gallery_data[album_name]["cover_thumbnail_url"] and album_photos:
                      gallery_data[album_name]["cover_thumbnail_url"] = album_photos[0]["thumbnail_url"]
                 elif not gallery_data[album_name]["cover_thumbnail_url"]:
-                    # url_for for static files is now on the blueprint's static endpoint
+                    # Use url_for for placeholder image (blueprint's static endpoint)
                     gallery_data[album_name]["cover_thumbnail_url"] = url_for('gallery.static', filename='placeholder.png')
 
     # Clean up empty albums that might have been created but had no photos
@@ -172,9 +173,8 @@ def scan_photos_and_generate_thumbnails():
 # Store gallery data globally after initial scan
 app.gallery_data = {}
 
-# Call initial_scan is done in __main__ context for local runs,
-# or implicitly by WSGI for deployed runs after app creation.
-# It uses the context set by the WSGI server for url_for.
+# Call initial_scan is now done within the context of os.environ setup in __main__
+# It is important that this call happens after environment variables for url_for are set.
 
 
 @gallery_bp.route('/')
@@ -237,10 +237,6 @@ def serve_thumbnail(filename):
     return send_from_directory(directory_to_serve_from, file_base_name)
 
 # Register the blueprint with the main Flask application.
-# The url_prefix for the blueprint is NOT explicitly set here.
-# It will be derived by Flask at runtime from the SCRIPT_NAME environment variable
-# (which Gunicorn/Apache set) combined with ProxyFix.
-# The blueprint's routes will internally act as if they are at the app's internal root.
 app.register_blueprint(gallery_bp)
 
 
@@ -252,23 +248,23 @@ if __name__ == '__main__':
     # The SCRIPT_NAME will determine the effective "APPLICATION_ROOT" for url_for.
     # The SERVER_NAME will determine the hostname.
     # For local testing, SCRIPT_NAME should be '/' as the app runs internally at root.
+    # Ensure all required environment variables are set before trying to access them
+    # and before calling scan_photos_and_generate_thumbnails.
     os.environ['SCRIPT_NAME'] = os.environ.get('SCRIPT_NAME', '/') # Internal root
     os.environ['SERVER_NAME'] = os.environ.get('SERVER_NAME', 'localhost')
     os.environ['SERVER_PORT'] = os.environ.get('SERVER_PORT', str(app_config['PORT']))
     os.environ['wsgi.url_scheme'] = os.environ.get('wsgi.url_scheme', 'http') # Default to http for local
 
-    # Call scan_photos_and_generate_thumbnails within a test request context
-    # It will use the os.environ values set above for url_for generation
+    # Call scan_photos_and_generate_thumbnails directly at startup, wrapped in test_request_context
+    # This will ensure url_for generates correct URLs (internal to the Flask app).
     with app.test_request_context(
-        path=os.environ['SCRIPT_NAME'] + '/',
-        base_url=f"{os.environ['wsgi.url_scheme']}://{os.environ['SERVER_NAME']}:{os.environ['SERVER_PORT']}" # Removed SCRIPT_NAME from base_url
+        path=os.environ['SCRIPT_NAME'], # Path is the app's root, e.g., '/'
+        base_url=f"{os.environ['wsgi.url_scheme']}://{os.environ['SERVER_NAME']}:{os.environ['SERVER_PORT']}"
     ):
-        # Explicitly set SCRIPT_NAME in the test context if not already derived from base_url
-        request.environ['SCRIPT_NAME'] = os.environ['SCRIPT_NAME']
-
-        app.gallery_data = scan_photos_and_generate_thumbnails()
+        request.environ['SCRIPT_NAME'] = os.environ['SCRIPT_NAME'] # Ensure SCRIPT_NAME is set in test context
+        app.gallery_data = scan_photos_and_generate_thumbnails() # Call function without base_url_prefix argument
 
 
-    print(f"Starting Flask app on http://{os.environ['SERVER_NAME']}:{os.environ['SERVER_PORT']}{os.environ['SCRIPT_NAME']}")
+    print(f"Starting Flask app on {os.environ.get('wsgi.url_scheme', 'http')}://{os.environ.get('SERVER_NAME', 'localhost')}:{os.environ.get('SERVER_PORT', '5000')}{os.environ.get('SCRIPT_NAME', '/')}")
     app.run(host='0.0.0.0', port=app_config['PORT'], debug=True)
 
