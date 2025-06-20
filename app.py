@@ -56,7 +56,7 @@ def load_config():
 load_config()
 
 # Initialize Flask app
-# NEW: static_url_path is explicitly set on the main Flask app constructor
+# static_url_path is explicitly set on the main Flask app constructor
 # This tells Flask's built-in static handler where its files are served from,
 # relative to the domain root (e.g., /gallery/static).
 app = Flask(__name__, static_url_path=app_config['BASE_URL_PREFIX'] + '/static')
@@ -128,13 +128,10 @@ def scan_photos_and_generate_thumbnails():
     # The SCRIPT_NAME and URL scheme are crucial here.
     with app.test_request_context(
         path=app_config['BASE_URL_PREFIX'] + '/',
-        base_url='https://localhost' + app_config['BASE_URL_PREFIX'], # Simulate HTTPS external URL
-        url_scheme='https' # Simulate HTTPS
+        base_url='https://localhost:' + str(app_config['PORT']) + app_config['BASE_URL_PREFIX'] # Removed url_scheme, it's implicitly part of base_url
     ):
-        # The SCRIPT_NAME will be automatically set by ProxyFix based on base_url,
-        # or can be set manually for test context if base_url alone is insufficient.
-        # request.environ['SCRIPT_NAME'] = app_config['BASE_URL_PREFIX'] # This line is often not needed if base_url is well-formed
-
+        # Explicitly set SCRIPT_NAME in the test context if not already derived from base_url
+        request.environ['SCRIPT_NAME'] = app_config['BASE_URL_PREFIX']
 
         for dirpath, dirnames, filenames in os.walk(photos_root):
             relative_path = Path(dirpath).relative_to(photos_root)
@@ -272,10 +269,9 @@ if __name__ == '__main__':
     # This simulates the environment Gunicorn would provide when deployed.
     with app.test_request_context(
         path=app_config['BASE_URL_PREFIX'] + '/',
-        base_url='http://localhost:' + str(app_config['PORT']), # Only define host and port once
-        url_scheme='http'
+        base_url='http://localhost:' + str(app_config['PORT']) # Removed url_scheme
     ):
-        # Explicitly set SCRIPT_NAME in the test context if not already derived from path
+        # Explicitly set SCRIPT_NAME in the test context if not already derived from base_url
         request.environ['SCRIPT_NAME'] = app_config['BASE_URL_PREFIX']
 
         # Call scan_photos_and_generate_thumbnails inside the context
