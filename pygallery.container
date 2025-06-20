@@ -39,11 +39,6 @@ PublishPort=8000:5000
 # IMPORTANT: Replace <YOUR_BASE_URL_PREFIX_VALUE> (e.g., /gallery, /myphotos)
 Environment=BASE_URL_PREFIX=<YOUR_BASE_URL_PREFIX_VALUE>
 
-# Automatically restart the container if it exits with a non-zero status
-# OnFailure will restart only if it fails (not on clean exit), unless you set Always.
-# For a web server, "always" or "on-failure" are common.
-Restart=on-failure
-
 # Add additional dependencies here, e.g., if you need network access
 # After=network-online.target
 
@@ -61,3 +56,8 @@ Description=My Lightweight Photo Gallery Container
 Wants=network-online.target
 After=network-online.target
 
+
+[Service]
+# Automatically restart the container if it exits with a non-zero status
+# Moved from [Container] group as it's a service-level directive.
+Restart=on-failure
