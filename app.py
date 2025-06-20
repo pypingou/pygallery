@@ -6,6 +6,7 @@ from PIL import Image
 from pathlib import Path
 import threading
 import time
+from werkzeug.middleware.proxy_fix import ProxyFix # Import ProxyFix
 
 # --- Configuration ---
 # Use a global variable for configuration to make it accessible across the app.
@@ -55,6 +56,13 @@ load_config()
 
 # Initialize Flask app after config is loaded
 app = Flask(__name__)
+
+# --- NEW: Apply ProxyFix to the Flask application ---
+# This middleware corrects Flask's understanding of the request environment
+# when running behind a reverse proxy (like Apache/Nginx).
+# It trusts the X-Forwarded-Host, X-Forwarded-Proto, X-Forwarded-For headers.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_prefix=1, x_proto=1)
+
 
 # --- Create a Blueprint for the gallery with a configurable URL prefix ---
 # Removed static_folder and static_url_path from Blueprint definition
@@ -250,7 +258,7 @@ def serve_thumbnail(filename):
 # Register the blueprint with the main Flask application.
 app.register_blueprint(gallery_bp)
 
-# --- NEW: Explicit static file serving route for the main app ---
+# --- Explicit static file serving route for the main app ---
 # This route catches all requests to <BASE_URL_PREFIX>/static/ and serves them
 # directly from the 'static' folder relative to the app's root directory.
 @app.route(app_config['BASE_URL_PREFIX'] + '/static/<path:filename>')
