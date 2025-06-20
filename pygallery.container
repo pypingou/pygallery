@@ -34,6 +34,11 @@ PublishPort=8000:5000
 # StaticIP=10.89.0.10 # Uncomment and set a specific IP if desired
 
 
+# Set the BASE_URL_PREFIX environment variable for the container.
+# This value must match what you have in your config.ini
+# IMPORTANT: Replace <YOUR_BASE_URL_PREFIX_VALUE> (e.g., /gallery, /myphotos)
+Environment=BASE_URL_PREFIX=<YOUR_BASE_URL_PREFIX_VALUE>
+
 # Automatically restart the container if it exits with a non-zero status
 # OnFailure will restart only if it fails (not on clean exit), unless you set Always.
 # For a web server, "always" or "on-failure" are common.

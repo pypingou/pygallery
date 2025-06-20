@@ -23,8 +23,17 @@ RUN mkdir -p photos thumbnails
 ARG FLASK_PORT=5000
 EXPOSE ${FLASK_PORT}
 
-# Command to run the Flask application
-# Use a more robust production-ready WSGI server like Gunicorn
-# Ensure Gunicorn is in your requirements.txt
-CMD ["gunicorn", "-b", "0.0.0.0:5000", "app:app"]
+# Command to run the Flask application using Gunicorn
+# IMPORTANT: The SCRIPT_NAME environment variable should match BASE_URL_PREFIX from config.ini
+# This tells Gunicorn (and thus Flask) the application's mount point.
+# '--forwarded-allow-ips "*"' tells Gunicorn to trust X-Forwarded-* headers from any proxy.
+CMD ["gunicorn", \
+     "-b", "0.0.0.0:5000", \
+     "--workers", "4", \
+     "--timeout", "120", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "--forwarded-allow-ips", "*", \
+     "--env", "SCRIPT_NAME=${BASE_URL_PREFIX}", \
+     "app:app"]
 
