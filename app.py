@@ -120,64 +120,56 @@ def scan_photos_and_generate_thumbnails():
     photos_root = app_config['PHOTOS_DIR']
     thumbnails_root = app_config['THUMBNAILS_DIR']
     thumbnail_size = app_config['THUMBNAIL_SIZE']
-    
+    base_url_prefix = app_config['BASE_URL_PREFIX'] # Get the prefix
+
     thumbnails_root.mkdir(parents=True, exist_ok=True)
 
-    # Create a dummy request context to allow url_for to work during scan,
-    # simulating a request that has passed through the proxy and ProxyFix.
-    # The SCRIPT_NAME and URL scheme are crucial here.
-    with app.test_request_context(
-        path=app_config['BASE_URL_PREFIX'] + '/',
-        base_url='https://localhost:' + str(app_config['PORT']) + app_config['BASE_URL_PREFIX'] # Removed url_scheme, it's implicitly part of base_url
-    ):
-        # Explicitly set SCRIPT_NAME in the test context if not already derived from base_url
-        request.environ['SCRIPT_NAME'] = app_config['BASE_URL_PREFIX']
+    # Reverted to manual URL construction for initial scan due to url_for complexities at startup
+    # The URLs are stored in app.gallery_data and later served via API or templates using url_for.
+    for dirpath, dirnames, filenames in os.walk(photos_root):
+        relative_path = Path(dirpath).relative_to(photos_root)
+        album_name = str(relative_path).replace(os.sep, '/')
 
-        for dirpath, dirnames, filenames in os.walk(photos_root):
-            relative_path = Path(dirpath).relative_to(photos_root)
-            album_name = str(relative_path).replace(os.sep, '/')
+        current_dir_images = [f for f in filenames if is_image_file(f)]
 
-            current_dir_images = [f for f in filenames if is_image_file(f)]
+        if current_dir_images:
+            print(f"Processing album: {album_name if album_name != '.' else 'root'}")
 
-            if current_dir_images:
-                print(f"Processing album: {album_name if album_name != '.' else 'root'}")
+            if album_name not in gallery_data:
+                gallery_data[album_name] = {
+                    "cover_thumbnail_url": "",
+                    "photos": []
+                }
 
-                if album_name not in gallery_data:
-                    gallery_data[album_name] = {
-                        "cover_thumbnail_url": "",
-                        "photos": []
-                    }
+            album_photos = []
+            album_thumbnail_dir = thumbnails_root / relative_path
+            album_thumbnail_dir.mkdir(parents=True, exist_ok=True)
 
-                album_photos = []
-                album_thumbnail_dir = thumbnails_root / relative_path
-                album_thumbnail_dir.mkdir(parents=True, exist_ok=True)
+            current_dir_images.sort(key=lambda x: x.lower())
 
-                current_dir_images.sort(key=lambda x: x.lower())
+            for photo_filename in current_dir_images:
+                photo_path = Path(dirpath) / photo_filename
+                thumbnail_path = album_thumbnail_dir / photo_filename
 
-                for photo_filename in current_dir_images:
-                    photo_path = Path(dirpath) / photo_filename
-                    thumbnail_path = album_thumbnail_dir / photo_filename
+                get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
 
-                    get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
+                # Manual URL construction for initial scan
+                original_url = f"{base_url_prefix}/photos/{album_name}/{photo_filename}" if album_name != '.' else f"{base_url_prefix}/photos/{photo_filename}"
+                thumb_url = f"{base_url_prefix}/thumbnails/{album_name}/{photo_filename}" if album_name != '.' else f"{base_url_prefix}/thumbnails/{photo_filename}"
 
-                    # Use url_for for robustness with blueprint endpoints
-                    original_url = url_for('gallery.serve_photo', filename=f"{album_name}/{photo_filename}" if album_name != '.' else photo_filename)
-                    thumb_url = url_for('gallery.serve_thumbnail', filename=f"{album_name}/{photo_filename}" if album_name != '.' else photo_filename)
+                album_photos.append({
+                    "original_filename": photo_filename,
+                    "original_url": original_url,
+                    "thumbnail_url": thumb_url
+                })
 
-                    album_photos.append({
-                        "original_filename": photo_filename,
-                        "original_url": original_url,
-                        "thumbnail_url": thumb_url
-                    })
+            gallery_data[album_name]["photos"].extend(album_photos)
 
-                gallery_data[album_name]["photos"].extend(album_photos)
-
-                if not gallery_data[album_name]["cover_thumbnail_url"] and album_photos:
-                     gallery_data[album_name]["cover_thumbnail_url"] = album_photos[0]["thumbnail_url"]
-                elif not gallery_data[album_name]["cover_thumbnail_url"]:
-                    # Use url_for for placeholder image (Flask's default static endpoint)
-                    # This will be generated relative to APPLICATION_ROOT and static_url_path.
-                    gallery_data[album_name]["cover_thumbnail_url"] = url_for('static', filename='placeholder.png')
+            if not gallery_data[album_name]["cover_thumbnail_url"] and album_photos:
+                 gallery_data[album_name]["cover_thumbnail_url"] = album_photos[0]["thumbnail_url"]
+            elif not gallery_data[album_name]["cover_thumbnail_url"]:
+                # Manual URL for placeholder image
+                gallery_data[album_name]["cover_thumbnail_url"] = f"{base_url_prefix}/static/placeholder.png"
 
     # Clean up empty albums that might have been created but had no photos
     gallery_data = {k: v for k, v in gallery_data.items() if v["photos"]}
@@ -191,7 +183,7 @@ def scan_photos_and_generate_thumbnails():
 app.gallery_data = {}
 
 # Call initial_scan directly during application startup.
-# This happens in the app context, where APPLICATION_ROOT is defined.
+# No need for app.test_request_context here, as url_for is no longer used in scan_photos_and_generate_thumbnails.
 app.gallery_data = scan_photos_and_generate_thumbnails()
 
 
@@ -264,20 +256,9 @@ if __name__ == '__main__':
     app_config['PHOTOS_DIR'].mkdir(parents=True, exist_ok=True)
     app_config['THUMBNAILS_DIR'].mkdir(parents=True, exist_ok=True)
 
-    # In a local development environment, establish a test request context
-    # to allow url_for to generate correct URLs during initial scan and direct runs.
-    # This simulates the environment Gunicorn would provide when deployed.
-    with app.test_request_context(
-        path=app_config['BASE_URL_PREFIX'] + '/',
-        base_url='http://localhost:' + str(app_config['PORT']) # Removed url_scheme
-    ):
-        # Explicitly set SCRIPT_NAME in the test context if not already derived from base_url
-        request.environ['SCRIPT_NAME'] = app_config['BASE_URL_PREFIX']
-
-        # Call scan_photos_and_generate_thumbnails inside the context
-        # This will populate app.gallery_data with correctly formed URLs
-        # (relative to SCRIPT_NAME, with http scheme in dev).
-        app.gallery_data = scan_photos_and_generate_thumbnails() # Moved inside context
+    # Call scan_photos_and_generate_thumbnails directly at startup
+    # No test_request_context needed here as URLs are manually constructed.
+    app.gallery_data = scan_photos_and_generate_thumbnails()
 
     print(f"Starting Flask app on http://127.0.0.1:{app_config['PORT']}")
     app.run(host='0.0.0.0', port=app_config['PORT'], debug=True)
