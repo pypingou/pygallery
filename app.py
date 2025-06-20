@@ -109,12 +109,30 @@ def scan_photos_and_generate_thumbnails():
     # The parameters for base_url and url_scheme are set to simulate the deployed environment
     # where Flask runs internally at '/' and Apache handles external prefix/HTTPS.
     # SCRIPT_NAME will be effectively '/' for url_for in this context.
+    # NEW: Use external_scheme, external_server, external_prefix for base_url and url_for
+    external_scheme = os.environ.get('wsgi.url_scheme', 'http') # 'https' when proxied by Apache
+    external_server = os.environ.get('SERVER_NAME', 'localhost') # 'example.com' when proxied by Apache
+    external_port = os.environ.get('SERVER_PORT', str(app_config['PORT'])) # '443' when proxied by Apache
+    # SCRIPT_NAME is '/' internally, but for url_for to generate *external* URLs,
+    # ProxyFix uses X-Forwarded-Prefix. So, we simulate the external prefix for url_for to work.
+    # This prefix comes from X-Forwarded-Prefix set by Apache, or from ENVIRONMENT in test context.
+    external_script_name = os.environ.get('SCRIPT_NAME', '/') # This is the app's *internal* root.
+                                                              # For url_for to generate external URLs,
+                                                              # it needs to be aware of the external prefix.
+                                                              # This is why we use _external=True and
+                                                              # ensure the test_request_context's base_url is full external.
+
+
     with app.test_request_context(
-        path='/', # The internal path that Flask sees
-        base_url=f"{os.environ.get('wsgi.url_scheme', 'http')}://{os.environ.get('SERVER_NAME', 'localhost')}:{os.environ.get('SERVER_PORT', '5000')}"
+        path=external_script_name, # Internal path Flask sees (e.g., '/')
+        base_url=f"{external_scheme}://{external_server}:{external_port}" # Full external base URL
+        # Removed url_scheme=external_scheme here to avoid AssertionError
     ):
-        # Ensure SCRIPT_NAME is set to '/' for internal routing within the test context
-        request.environ['SCRIPT_NAME'] = '/'
+        # Ensure SCRIPT_NAME is set in the test context
+        request.environ['SCRIPT_NAME'] = external_script_name
+        request.environ['SERVER_NAME'] = external_server
+        request.environ['SERVER_PORT'] = external_port
+        request.environ['wsgi.url_scheme'] = external_scheme
 
 
         for dirpath, dirnames, filenames in os.walk(photos_root):
@@ -144,9 +162,10 @@ def scan_photos_and_generate_thumbnails():
 
                     get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
 
-                    # NEW: Use url_for directly. It will build URLs relative to the app's internal root ('/')
-                    original_url = url_for('gallery.serve_photo', filename=f"{album_name}/{photo_filename}" if album_name != '.' else photo_filename)
-                    thumb_url = url_for('gallery.serve_thumbnail', filename=f"{album_name}/{photo_filename}" if album_name != '.' else photo_filename)
+                    # NEW: Use _external=True with url_for to generate absolute URLs
+                    # ProxyFix and the context will ensure the correct domain/scheme/prefix.
+                    original_url = url_for('gallery.serve_photo', filename=f"{album_name}/{photo_filename}" if album_name != '.' else photo_filename, _external=True)
+                    thumb_url = url_for('gallery.serve_thumbnail', filename=f"{album_name}/{photo_filename}" if album_name != '.' else photo_filename, _external=True)
 
                     album_photos.append({
                         "original_filename": photo_filename,
@@ -159,8 +178,8 @@ def scan_photos_and_generate_thumbnails():
                 if not gallery_data[album_name]["cover_thumbnail_url"] and album_photos:
                      gallery_data[album_name]["cover_thumbnail_url"] = album_photos[0]["thumbnail_url"]
                 elif not gallery_data[album_name]["cover_thumbnail_url"]:
-                    # Use url_for for placeholder image (blueprint's static endpoint)
-                    gallery_data[album_name]["cover_thumbnail_url"] = url_for('gallery.static', filename='placeholder.png')
+                    # Use _external=True for placeholder as well
+                    gallery_data[album_name]["cover_thumbnail_url"] = url_for('gallery.static', filename='placeholder.png', _external=True)
 
     # Clean up empty albums that might have been created but had no photos
     gallery_data = {k: v for k, v in gallery_data.items() if v["photos"]}
@@ -237,6 +256,10 @@ def serve_thumbnail(filename):
     return send_from_directory(directory_to_serve_from, file_base_name)
 
 # Register the blueprint with the main Flask application.
+# The url_prefix for the blueprint is NOT explicitly set here.
+# It will be derived by Flask at runtime from the SCRIPT_NAME environment variable
+# (which Gunicorn/Apache set) combined with ProxyFix.
+# The blueprint's routes will internally act as if they are at the app's internal root.
 app.register_blueprint(gallery_bp)
 
 
