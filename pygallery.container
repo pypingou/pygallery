@@ -21,6 +21,19 @@ Volume=/home/user/my_gallery_thumbnails:/app/thumbnails:Z
 # Since Apache is likely using port 80, we'll use port 8000 for the gallery directly.
 PublishPort=8000:5000
 
+
+# NEW: Connect the container to a user-defined network
+# Replace 'my_gallery_network' with the name you chose when creating the network using
+# podman network create <name>
+#Network=my_gallery_network
+
+# OPTIONAL: Assign a static IP address within the network's subnet.
+# Choose an IP address that is within the subnet range of 'my_gallery_network'
+# (e.g., if the subnet is 10.89.0.0/24, you might pick 10.89.0.10).
+# Make sure this IP is not already in use by the network's gateway or other containers.
+# StaticIP=10.89.0.10 # Uncomment and set a specific IP if desired
+
+
 # Automatically restart the container if it exits with a non-zero status
 # OnFailure will restart only if it fails (not on clean exit), unless you set Always.
 # For a web server, "always" or "on-failure" are common.
