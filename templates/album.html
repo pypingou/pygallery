@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Album: {{ album_name }}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Explicitly prefix static CSS file -->
+    <link rel="stylesheet" href="{{ base_url_prefix }}/static/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <script>
         // Set a global JavaScript variable for the base URL prefix
@@ -43,7 +44,8 @@
         <p>designed and coded by pingou & gemini</p>
     </footer>
 
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <!-- Explicitly prefix static JavaScript file -->
+    <script src="{{ base_url_prefix }}/static/js/script.js"></script>
 </body>
 </html>
 

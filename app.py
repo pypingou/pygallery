@@ -155,9 +155,8 @@ def scan_photos_and_generate_thumbnails():
             if not gallery_data[album_name]["cover_thumbnail_url"] and album_photos:
                  gallery_data[album_name]["cover_thumbnail_url"] = album_photos[0]["thumbnail_url"]
             elif not gallery_data[album_name]["cover_thumbnail_url"]:
-                # If no photos in album, use a placeholder. Assuming placeholder.png is in static/
-                # If static/ is under the blueprint, adjust this path.
-                gallery_data[album_name]["cover_thumbnail_url"] = "/static/placeholder.png" # This assumes /static is at root, not prefixed. If your static files are also prefixed, change this to base_url_prefix + "/static/placeholder.png"
+                # Use base_url_prefix for placeholder.png as well
+                gallery_data[album_name]["cover_thumbnail_url"] = base_url_prefix + "/static/placeholder.png"
 
     # Clean up empty albums that might have been created but had no photos
     gallery_data = {k: v for k, v in gallery_data.items() if v["photos"]}
@@ -246,7 +245,12 @@ def serve_thumbnail(filename):
     return send_from_directory(directory_to_serve_from, file_base_name)
 
 # Register the blueprint with the main Flask application
-app.register_blueprint(gallery_bp)
+# It's important to set a static_url_path if you want to serve static files
+# for the main app under the base_url_prefix.
+# If your static folder is not intended to be prefixed (e.g. /static/foo.png not /gallery/static/foo.png)
+# then you would not set static_url_path here or use url_for('static', ...)
+# However, given the problem, it suggests static files *should* be prefixed.
+app.register_blueprint(gallery_bp, static_folder='static', static_url_path=app_config['BASE_URL_PREFIX'] + '/static')
 
 
 # --- Main execution ---
