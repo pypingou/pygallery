@@ -5,10 +5,10 @@
 
 [Container]
 # Name of the container
-ContainerName=photo-gallery-app
+ContainerName=pygallery-app
 
 # Name of the image to run (must be built locally or pulled from a registry)
-Image=localhost/my-photo-gallery:latest
+Image=localhost/pygallery:latest
 
 # Define the volume mounts for your photos and thumbnails.
 # IMPORTANT: Replace /home/user/my_gallery_photos and /home/user/my_gallery_thumbnails
@@ -18,46 +18,33 @@ Volume=/home/user/my_gallery_photos:/app/photos:Z
 Volume=/home/user/my_gallery_thumbnails:/app/thumbnails:Z
 
 # Expose the container's port 5000 to the host's port 8000.
-# Since Apache is likely using port 80, we'll use port 8000 for the gallery directly.
+# This port mapping is primarily for direct access/testing.
+# Apache will use the container's internal IP/name.
 PublishPort=8000:5000
 
-
-# NEW: Connect the container to a user-defined network
-# Replace 'my_gallery_network' with the name you chose when creating the network using
-# podman network create <name>
+# Connect the container to a user-defined network
+# Replace 'my_gallery_network' with the name you chose when creating it.
 #Network=my_gallery_network
 
 # OPTIONAL: Assign a static IP address within the network's subnet.
-# Choose an IP address that is within the subnet range of 'my_gallery_network'
-# (e.g., if the subnet is 10.89.0.0/24, you might pick 10.89.0.10).
-# Make sure this IP is not already in use by the network's gateway or other containers.
+# Choose an IP address that is within the subnet range of 'my_gallery_network'.
 # StaticIP=10.89.0.10 # Uncomment and set a specific IP if desired
 
-
-# Set the BASE_URL_PREFIX environment variable for the container.
-# This value must match what you have in your config.ini
+# Set environment variables for the container.
+# BASE_URL_PREFIX: This value must match what you have in your config.ini
+# SCRIPT_NAME: This tells Gunicorn (and thus Flask via ProxyFix) its application mount point.
 # IMPORTANT: Replace <YOUR_BASE_URL_PREFIX_VALUE> (e.g., /gallery, /myphotos)
 Environment=BASE_URL_PREFIX=<YOUR_BASE_URL_PREFIX_VALUE>
-
-# Add additional dependencies here, e.g., if you need network access
-# After=network-online.target
-
-# Optional: Set environment variables for the container if needed (e.g., specific Flask settings)
-# Env=FLASK_ENV=production
-
-# Optional: Add SELinux label to ensure container has proper access, often needed on Fedora.
-# This is typically handled by the :Z option on volumes, but can be explicit for system directories.
-# Label=io.containers.autoupdate=registry
+Environment=SCRIPT_NAME=<YOUR_BASE_URL_PREFIX_VALUE>
 
 [Unit]
 # Description for the systemd service
-Description=My Lightweight Photo Gallery Container
+Description=pygallery: My Lightweight Photo Gallery Container
 # Ensure network is up before starting the service
 Wants=network-online.target
 After=network-online.target
 
-
 [Service]
 # Automatically restart the container if it exits with a non-zero status
-# Moved from [Container] group as it's a service-level directive.
 Restart=on-failure
+
