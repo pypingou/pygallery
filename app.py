@@ -57,7 +57,10 @@ load_config()
 app = Flask(__name__)
 
 # --- Create a Blueprint for the gallery with a configurable URL prefix ---
-gallery_bp = Blueprint('gallery', __name__, url_prefix=app_config['BASE_URL_PREFIX'])
+# Removed static_folder and static_url_path from Blueprint definition
+# Static files will now be served by a dedicated route on the main app.
+gallery_bp = Blueprint('gallery', __name__,
+                       url_prefix=app_config['BASE_URL_PREFIX'])
 
 # --- Thumbnail Generation Logic ---
 # Supported image extensions
@@ -244,13 +247,17 @@ def serve_thumbnail(filename):
 
     return send_from_directory(directory_to_serve_from, file_base_name)
 
-# Register the blueprint with the main Flask application
-# It's important to set a static_url_path if you want to serve static files
-# for the main app under the base_url_prefix.
-# If your static folder is not intended to be prefixed (e.g. /static/foo.png not /gallery/static/foo.png)
-# then you would not set static_url_path here or use url_for('static', ...)
-# However, given the problem, it suggests static files *should* be prefixed.
-app.register_blueprint(gallery_bp, static_folder='static', static_url_path=app_config['BASE_URL_PREFIX'] + '/static')
+# Register the blueprint with the main Flask application.
+app.register_blueprint(gallery_bp)
+
+# --- NEW: Explicit static file serving route for the main app ---
+# This route catches all requests to <BASE_URL_PREFIX>/static/ and serves them
+# directly from the 'static' folder relative to the app's root directory.
+@app.route(app_config['BASE_URL_PREFIX'] + '/static/<path:filename>')
+def serve_static(filename):
+    # Ensure app.root_path is correctly pointing to your project's root
+    # where the 'static' folder resides.
+    return send_from_directory(os.path.join(app.root_path, 'static'), filename)
 
 
 # --- Main execution ---
