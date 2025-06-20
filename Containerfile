@@ -24,8 +24,8 @@ ARG FLASK_PORT=5000
 EXPOSE ${FLASK_PORT}
 
 # Command to run the Flask application using Gunicorn
-# SCRIPT_NAME will be passed directly via the Quadlet file's Environment directive.
-# `--forwarded-allow-ips "*"` tells Gunicorn to trust X-Forwarded-* headers from any proxy.
+# NEW: Explicitly pass SCRIPT_NAME to Gunicorn using --env.
+# Gunicorn will read SCRIPT_NAME from its environment (set by Quadlet).
 CMD ["gunicorn", \
      "-b", "0.0.0.0:5000", \
      "--workers", "4", \
@@ -33,5 +33,6 @@ CMD ["gunicorn", \
      "--access-logfile", "-", \
      "--error-logfile", "-", \
      "--forwarded-allow-ips", "*", \
+     "--env", "SCRIPT_NAME=${SCRIPT_NAME}", \
      "app:app"]
 
