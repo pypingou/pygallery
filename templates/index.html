@@ -4,12 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Photo Gallery</title>
-    <!-- Explicitly prefix static CSS file -->
-    <link rel="stylesheet" href="{{ base_url_prefix }}/static/css/style.css">
+    <!-- Use url_for for static CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <script>
-        // Set a global JavaScript variable for the base URL prefix
-        window.BASE_URL_PREFIX = "{{ base_url_prefix }}";
+        // No longer need to set window.BASE_URL_PREFIX here if url_for is used
     </script>
 </head>
 <body>
@@ -31,8 +30,8 @@
         <p>designed and coded by pingou & gemini</p>
     </footer>
 
-    <!-- Explicitly prefix static JavaScript file -->
-    <script src="{{ base_url_prefix }}/static/js/script.js"></script>
+    <!-- Use url_for for static JavaScript file -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>
 

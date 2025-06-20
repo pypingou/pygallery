@@ -5,9 +5,36 @@ let currentAlbumPhotos = []; // Stores the list of photos for the current album
 let currentPhotoIndex = 0; // Stores the index of the currently displayed photo
 let currentAlbumName = ''; // Stores the name of the currently viewed album
 
-// The base URL prefix will be set dynamically by Flask in the HTML templates
-// e.g., window.BASE_URL_PREFIX = "/gallery"; or "" for root deployment.
-const BASE_URL_PREFIX = window.BASE_URL_PREFIX || ''; // Default to empty string if not set
+// NEW: Use a helper function to get the current base URL prefix from the DOM/URL
+function getBaseUrlPrefix() {
+    // This assumes the Flask app's APPLICATION_ROOT is correctly set and
+    // Apache's ProxyPass configuration maps /<prefix>/ to the container's root.
+    // window.location.pathname will start with /<prefix>/ if deployed that way.
+    const pathParts = window.location.pathname.split('/');
+    // Check if the first non-empty part of the path is an album or API call
+    // If it's something like /gallery/album or /gallery/api, then /gallery is the prefix.
+    if (pathParts.length > 1 && pathParts[1] && (pathParts[1] === 'gallery' || pathParts[1] === 'photos' || pathParts[1] === 'thumbnails' || pathParts[1] === 'api' || pathParts[1] === 'album')) {
+        return '/' + pathParts[1];
+    }
+    // More robust check: use window.location.pathname up to the first /album or /api
+    // Or, more simply, if you expect only one prefix, just return it.
+    // For this app, the base URL prefix is determined by the Flask app itself,
+    // and if not at root, it should always be the first segment.
+    if (pathParts.length > 1 && pathParts[1] !== '') {
+        // Find the index of the blueprint prefix if it exists in the URL
+        // Assumes the application itself is mounted at /<prefix>
+        // A simple way is to take the first path component after the root slash
+        // For example, if path is /gallery/album/foo, it returns /gallery
+        // If path is /album/foo (root deployment), it returns ""
+        if (window.location.pathname.startsWith('/gallery')) { // Hardcode for '/gallery' for now
+             return '/gallery';
+        }
+    }
+    return ''; // Default to empty string for root deployment
+}
+
+const BASE_URL_PREFIX = getBaseUrlPrefix();
+
 
 document.addEventListener('DOMContentLoaded', () => {
     // Determine if we are on the main gallery page or an album page
@@ -26,8 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (currentAlbumName) {
             document.getElementById('album-title').textContent = `Album: ${currentAlbumName.replace(/\//g, ' / ')}`;
-            // initializeAlbumPage will call fetchPhotos and then handle the image parameter
-            initializeAlbumPage();
+            initializeAlbumPage(); // This will call fetchPhotos and then handle the image parameter
         }
     }
 
@@ -189,7 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function initializeAlbumPage() {
-        const photos = await fetchPhotos(currentAlbumName); // Fetch photos for the album
+        const photos = await fetchPhotos(currentAlbumName);
         if (photos.length > 0) {
             const imageUrlParam = getUrlParameter('image');
             if (imageUrlParam) {
@@ -234,7 +260,9 @@ async function fetchAlbums() {
             albumImg.alt = `Cover for ${album.display_name}`;
             albumImg.classList.add('album-card-img');
             albumImg.onerror = () => {
-                albumImg.src = `${BASE_URL_PREFIX}/static/placeholder.png`; // Ensure placeholder also uses prefix if served by Flask
+                // Use url_for('static', ...) will now correctly handle the prefix
+                // This means the Flask backend needs to provide the full URL, not just relative
+                albumImg.src = `${BASE_URL_PREFIX}/static/placeholder.png`;
             };
 
             const albumInfo = document.createElement('div');
@@ -289,7 +317,7 @@ async function fetchPhotos(albumName) {
             photoImg.src = photo.thumbnail_url;
             photoImg.alt = photo.original_filename;
             photoImg.onerror = () => {
-                photoImg.src = 'https://placehold.co/200x200/e9ecef/495057?text=No+Image';
+                photoImg.src = `${BASE_URL_PREFIX}/static/placeholder.png`;
             };
 
             photoThumbnailDiv.appendChild(photoImg);

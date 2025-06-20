@@ -4,18 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Album: {{ album_name }}</title>
-    <!-- Explicitly prefix static CSS file -->
-    <link rel="stylesheet" href="{{ base_url_prefix }}/static/css/style.css">
+    <!-- Use url_for for static CSS file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <script>
-        // Set a global JavaScript variable for the base URL prefix
-        window.BASE_URL_PREFIX = "{{ base_url_prefix }}";
+        // No longer need to set window.BASE_URL_PREFIX here if url_for is used
     </script>
 </head>
 <body>
     <header class="header">
         <nav class="back-nav">
-            <a href="{{ base_url_prefix }}/" class="back-button">&larr; Back to Galleries</a>
+            <!-- Use url_for for back button -->
+            <a href="{{ url_for('gallery.index') }}" class="back-button">&larr; Back to Galleries</a>
         </nav>
         <h1 class="header-title" id="album-title">Album: {{ album_name }}</h1>
     </header>
@@ -44,8 +44,8 @@
         <p>designed and coded by pingou & gemini</p>
     </footer>
 
-    <!-- Explicitly prefix static JavaScript file -->
-    <script src="{{ base_url_prefix }}/static/js/script.js"></script>
+    <!-- Use url_for for static JavaScript file -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>
 
