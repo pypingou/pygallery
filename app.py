@@ -9,8 +9,7 @@ import time
 from werkzeug.middleware.proxy_fix import ProxyFix # Import ProxyFix
 
 # --- Configuration ---
-# Use a global variable for configuration to make it accessible across the app.
-# This will be populated from config.ini.
+# Removed BASE_URL_PREFIX from app_config, as the app is agnostic to it.
 app_config = {}
 
 def load_config():
@@ -34,10 +33,6 @@ def load_config():
         app_config['THUMBNAILS_DIR'] = config['Gallery'].get('THUMBNAILS_DIR', './thumbnails')
         app_config['THUMBNAIL_SIZE'] = tuple(map(int, config['Gallery'].get('THUMBNAIL_SIZE', '200,200').split(',')))
         app_config['PORT'] = int(config['Gallery'].get('PORT', '5000'))
-        # Base URL Prefix is handled by SCRIPT_NAME from environment
-        # and ProxyFix. It's not explicitly read here for app configuration
-        # but is assumed to be set in the environment by the deployer.
-
     except ValueError as e:
         print(f"Error parsing configuration: {e}")
         exit(1)
@@ -51,8 +46,8 @@ def load_config():
 # Load configuration when the script starts
 load_config()
 
-# Initialize Flask app
-# Removed static_url_path here. Static files will be served explicitly via a blueprint route.
+# Initialize Flask app - it will internally run at root '/'
+# Static files are handled by the blueprint's static_folder/static_url_path.
 app = Flask(__name__)
 
 # --- Apply ProxyFix to the Flask application ---
@@ -61,8 +56,8 @@ app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_prefix=1, x_proto=1)
 
 # --- Create a Blueprint for the gallery ---
-# The blueprint's URL prefix will be set by SCRIPT_NAME/ProxyFix at runtime.
-# We also define the static folder and its URL path here for explicit handling.
+# The blueprint's URL prefix is now its internal path relative to app root.
+# We define the static folder and its URL path here, relative to the blueprint.
 gallery_bp = Blueprint('gallery', __name__,
                        template_folder='templates',
                        static_folder='static', # Refers to the 'static' directory relative to app.py
@@ -107,20 +102,17 @@ def scan_photos_and_generate_thumbnails():
     
     thumbnails_root.mkdir(parents=True, exist_ok=True)
 
-    # NEW: The SCRIPT_NAME will be passed by Gunicorn/Quadlet, Flask uses it via ProxyFix.
-    # For standalone runs, we need to simulate the environment
-    # Use os.environ.get('SCRIPT_NAME', '/') for the prefix
-    current_script_name = os.environ.get('SCRIPT_NAME', '/')
-    current_server_name = os.environ.get('SERVER_NAME', 'localhost')
-    current_server_port = os.environ.get('SERVER_PORT', str(app_config['PORT']))
-    current_url_scheme = os.environ.get('wsgi.url_scheme', 'http') # Default to http for local
-
+    # NEW: Create a test request context that simulates what ProxyFix will provide
+    # when the app is deployed behind a proxy.
+    # Internally, the app runs at '/'. External prefix is handled by ProxyFix/Apache.
     with app.test_request_context(
-        path=current_script_name + '/', # Path is the app's root
-        base_url=f"{current_url_scheme}://{current_server_name}:{current_server_port}{current_script_name}"
+        path='/', # The internal path is '/'
+        base_url='http://localhost:' + str(app_config['PORT']) # Simulate local dev server base URL
     ):
-        # Explicitly set SCRIPT_NAME in the test context if not already derived from base_url
-        request.environ['SCRIPT_NAME'] = current_script_name
+        # Explicitly set SCRIPT_NAME in the test context. This is how Flask knows
+        # its "external" root. When deployed, ProxyFix sets this from X-Forwarded-Prefix.
+        # For local test, we use '/' as the app runs internally at root.
+        request.environ['SCRIPT_NAME'] = '/' # App's internal script name is '/'
 
 
         for dirpath, dirnames, filenames in os.walk(photos_root):
@@ -150,7 +142,8 @@ def scan_photos_and_generate_thumbnails():
 
                     get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
 
-                    # url_for for gallery blueprint endpoints (which are now relative to the blueprint's root)
+                    # Now url_for generates URLs relative to the internal app root ('/')
+                    # e.g., /photos/album_name/filename.jpg, /static/css/style.css
                     original_url = url_for('gallery.serve_photo', filename=f"{album_name}/{photo_filename}" if album_name != '.' else photo_filename)
                     thumb_url = url_for('gallery.serve_thumbnail', filename=f"{album_name}/{photo_filename}" if album_name != '.' else photo_filename)
 
@@ -244,6 +237,10 @@ def serve_thumbnail(filename):
     return send_from_directory(directory_to_serve_from, file_base_name)
 
 # Register the blueprint with the main Flask application.
+# The url_prefix for the blueprint is NOT explicitly set here.
+# It will be derived by Flask at runtime from the SCRIPT_NAME environment variable
+# (which Gunicorn/Apache set) combined with ProxyFix.
+# The blueprint's routes will internally act as if they are at the app's internal root.
 app.register_blueprint(gallery_bp)
 
 
@@ -254,19 +251,21 @@ if __name__ == '__main__':
     # This allows url_for to generate correct URLs during initial scan.
     # The SCRIPT_NAME will determine the effective "APPLICATION_ROOT" for url_for.
     # The SERVER_NAME will determine the hostname.
-    # Set SCRIPT_NAME from config.ini's BASE_URL_PREFIX for local runs
-    base_url_prefix_from_config = app_config.get('BASE_URL_PREFIX', '/')
-    os.environ['SCRIPT_NAME'] = os.environ.get('SCRIPT_NAME', base_url_prefix_from_config if base_url_prefix_from_config else '/')
+    # For local testing, SCRIPT_NAME should be '/' as the app runs internally at root.
+    os.environ['SCRIPT_NAME'] = os.environ.get('SCRIPT_NAME', '/') # Internal root
     os.environ['SERVER_NAME'] = os.environ.get('SERVER_NAME', 'localhost')
     os.environ['SERVER_PORT'] = os.environ.get('SERVER_PORT', str(app_config['PORT']))
-    os.environ['wsgi.url_scheme'] = os.environ.get('wsgi.url_scheme', 'http') # Explicitly set for local test context
+    os.environ['wsgi.url_scheme'] = os.environ.get('wsgi.url_scheme', 'http') # Default to http for local
 
     # Call scan_photos_and_generate_thumbnails within a test request context
     # It will use the os.environ values set above for url_for generation
     with app.test_request_context(
         path=os.environ['SCRIPT_NAME'] + '/',
-        base_url=f"{os.environ['wsgi.url_scheme']}://{os.environ['SERVER_NAME']}:{os.environ['SERVER_PORT']}{os.environ['SCRIPT_NAME']}"
+        base_url=f"{os.environ['wsgi.url_scheme']}://{os.environ['SERVER_NAME']}:{os.environ['SERVER_PORT']}" # Removed SCRIPT_NAME from base_url
     ):
+        # Explicitly set SCRIPT_NAME in the test context if not already derived from base_url
+        request.environ['SCRIPT_NAME'] = os.environ['SCRIPT_NAME']
+
         app.gallery_data = scan_photos_and_generate_thumbnails()
 
 
