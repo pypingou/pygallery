@@ -24,9 +24,8 @@ ARG FLASK_PORT=5000
 EXPOSE ${FLASK_PORT}
 
 # Command to run the Flask application using Gunicorn
-# IMPORTANT: The SCRIPT_NAME environment variable should match BASE_URL_PREFIX from config.ini
-# This tells Gunicorn (and thus Flask) the application's mount point.
-# '--forwarded-allow-ips "*"' tells Gunicorn to trust X-Forwarded-* headers from any proxy.
+# SCRIPT_NAME will be passed directly via the Quadlet file's Environment directive.
+# `--forwarded-allow-ips "*"` tells Gunicorn to trust X-Forwarded-* headers from any proxy.
 CMD ["gunicorn", \
      "-b", "0.0.0.0:5000", \
      "--workers", "4", \
