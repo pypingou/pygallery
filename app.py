@@ -55,7 +55,8 @@ def load_config():
 load_config()
 
 # Initialize Flask app after config is loaded
-app = Flask(__name__)
+# NEW: Configure static_url_path directly on the main app to include the prefix
+app = Flask(__name__, static_url_path=app_config['BASE_URL_PREFIX'] + '/static')
 
 # --- NEW: Apply ProxyFix to the Flask application ---
 # This middleware corrects Flask's understanding of the request environment
@@ -65,8 +66,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_prefix=1, x_proto=1)
 
 
 # --- Create a Blueprint for the gallery with a configurable URL prefix ---
-# Removed static_folder and static_url_path from Blueprint definition
-# Static files will now be served by a dedicated route on the main app.
+# static_folder and static_url_path are now handled by the main app instance
 gallery_bp = Blueprint('gallery', __name__,
                        url_prefix=app_config['BASE_URL_PREFIX'])
 
@@ -258,14 +258,11 @@ def serve_thumbnail(filename):
 # Register the blueprint with the main Flask application.
 app.register_blueprint(gallery_bp)
 
-# --- Explicit static file serving route for the main app ---
-# This route catches all requests to <BASE_URL_PREFIX>/static/ and serves them
-# directly from the 'static' folder relative to the app's root directory.
-@app.route(app_config['BASE_URL_PREFIX'] + '/static/<path:filename>')
-def serve_static(filename):
-    # Ensure app.root_path is correctly pointing to your project's root
-    # where the 'static' folder resides.
-    return send_from_directory(os.path.join(app.root_path, 'static'), filename)
+# --- Removed explicit static file serving route for the main app ---
+# The static_url_path argument on the Flask app constructor handles this.
+# @app.route(app_config['BASE_URL_PREFIX'] + '/static/<path:filename>')
+# def serve_static(filename):
+#     return send_from_directory(os.path.join(app.root_path, 'static'), filename)
 
 
 # --- Main execution ---
