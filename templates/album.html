@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Album: {{ album_name }}</title>
     <!-- Use url_for for static CSS file -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('gallery.static', filename='css/style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <script>
-        // No longer need to set window.BASE_URL_PREFIX here, script.js will derive it
+        // No longer need to set window.BASE_URL_PREFIX here, script.js will derive it from URL
     </script>
 </head>
 <body>
@@ -45,7 +45,7 @@
     </footer>
 
     <!-- Use url_for for static JavaScript file -->
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <script src="{{ url_for('gallery.static', filename='js/script.js') }}"></script>
 </body>
 </html>
 

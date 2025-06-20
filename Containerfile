@@ -24,7 +24,7 @@ ARG FLASK_PORT=5000
 EXPOSE ${FLASK_PORT}
 
 # Command to run the Flask application using Gunicorn
-# NEW: Changed to shell form to allow SCRIPT_NAME environment variable expansion.
-# Gunicorn will now correctly receive the expanded SCRIPT_NAME from the environment (set by Quadlet).
-CMD gunicorn -b 0.0.0.0:5000 --workers 4 --timeout 120 --access-logfile - --error-logfile - --forwarded-allow-ips "*" --env SCRIPT_NAME="${SCRIPT_NAME}" app:app
+# Set SCRIPT_NAME to '/' as the application runs at the root of the container.
+# This ensures consistency for Flask's internal routing.
+CMD gunicorn -b 0.0.0.0:5000 --workers 4 --timeout 120 --access-logfile - --error-logfile - --forwarded-allow-ips "*" --env SCRIPT_NAME="/" app:app
 

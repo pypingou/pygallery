@@ -6,27 +6,17 @@ let currentPhotoIndex = 0; // Stores the index of the currently displayed photo
 let currentAlbumName = ''; // Stores the name of the currently viewed album
 
 // NEW: Dynamically determine the base URL prefix from window.location.pathname
+// This function determines the segment of the path that represents the app's mount point.
 function getBaseUrlPrefix() {
     const pathSegments = window.location.pathname.split('/').filter(s => s.length > 0);
-    // Find the segment that corresponds to the application's root if it's not at the domain root.
-    // Assuming the application is deployed under a single, well-defined path segment (e.g., /gallery).
-    // If the path is something like /gallery/album/foo, the prefix is /gallery.
-    // If the path is /album/foo (root deployment), the prefix is ''.
-    if (pathSegments.length > 0) {
-        // A simple heuristic: if the first segment is not a direct file or a well-known top-level API
-        // it might be the prefix. For our app, 'album', 'api', 'photos', 'thumbnails' are handled by blueprint.
-        // So, if the first segment is not 'album', 'api', 'photos', 'thumbnails',
-        // and it's also not empty, it could be the prefix.
-        // For simplicity and robustness given our specific app structure:
-        // We assume the prefix is the first path segment if the path isn't just '/'.
-        // This is necessary because Flask's url_for will generate paths relative to its internal root.
-        // We need to match the *external* URL structure.
-        // Let's assume the prefix starts with a specific known segment like 'gallery'.
-        if (pathSegments[0] === 'gallery') {
-            return '/' + pathSegments[0];
-        }
+    // If the first segment is "static", "api", "album", "photos", "thumbnails",
+    // it means the app is likely at the root.
+    // Otherwise, the first segment is probably the BASE_URL_PREFIX.
+    const knownAppRoots = ['static', 'api', 'album', 'photos', 'thumbnails'];
+    if (pathSegments.length > 0 && !knownAppRoots.includes(pathSegments[0])) {
+        return '/' + pathSegments[0];
     }
-    return ''; // Default to empty string if no prefix is found (app at root)
+    return ''; // App is at root (or first segment is an app-specific route)
 }
 
 const BASE_URL_PREFIX = getBaseUrlPrefix();
@@ -38,12 +28,13 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Construct the expected path for the main gallery page dynamically
     const galleryRootPath = BASE_URL_PREFIX + '/';
-    const albumRootPath = BASE_URL_PREFIX + '/album/';
+    const albumRootPath = BASE_URL_PREFIX + '/album/'; // e.g., /gallery/album/
 
     // Adjust conditions to strictly match based on dynamically found prefix
     if (pathname === galleryRootPath || (BASE_URL_PREFIX === '' && pathname === '/')) { // Handle /gallery/ and / (for root)
         fetchAlbums();
     } else if (pathname.startsWith(albumRootPath)) {
+        // Example: /gallery/album/Family/Vacation/Paris -> albumPathEncoded = Family/Vacation/Paris
         const albumPathEncoded = pathname.substring(albumRootPath.length);
         const albumName = decodeURIComponent(albumPathEncoded); // Decode it once
         currentAlbumName = albumName; // Store globally
@@ -185,7 +176,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentAlbumPhotos.length > 0 && currentAlbumName) {
             const photo = currentAlbumPhotos[currentPhotoIndex];
             // Construct the shareable URL using the full current window location origin + derived prefix
-            const shareUrl = `${window.location.origin}${BASE_URL_PREFIX}/album/${currentAlbumName}?image=${encodeURIComponent(photo.original_filename)}`;
+            // The BASE_URL_PREFIX from getBaseUrlPrefix() is already included in window.location.origin for shared links
+            const shareUrl = `${window.location.origin}${window.location.pathname.split('?')[0]}?image=${encodeURIComponent(photo.original_filename)}`;
 
             const tempInput = document.createElement('input');
             tempInput.value = shareUrl;
@@ -253,12 +245,11 @@ async function fetchAlbums() {
             albumCard.classList.add('album-card');
 
             const albumImg = document.createElement('img');
-            albumImg.src = album.cover_thumbnail_url;
+            albumImg.src = album.cover_thumbnail_url; // This URL comes directly from Flask
             albumImg.alt = `Cover for ${album.display_name}`;
             albumImg.classList.add('album-card-img');
             albumImg.onerror = () => {
-                // url_for for static files is now correctly handled by Flask's side
-                // The URL coming from Flask API should be complete (e.g., /gallery/static/placeholder.png)
+                // The placeholder URL should also be absolute from the domain root
                 albumImg.src = `${BASE_URL_PREFIX}/static/placeholder.png`;
             };
 
@@ -311,10 +302,10 @@ async function fetchPhotos(albumName) {
             photoThumbnailDiv.classList.add('photo-thumbnail');
 
             const photoImg = document.createElement('img');
-            photoImg.src = photo.thumbnail_url;
+            photoImg.src = photo.thumbnail_url; // This URL comes directly from Flask
             photoImg.alt = photo.original_filename;
             photoImg.onerror = () => {
-                photoImg.src = `${BASE_URL_PREFIX}/static/placeholder.png`;
+                albumImg.src = `${BASE_URL_PREFIX}/static/placeholder.png`;
             };
 
             photoThumbnailDiv.appendChild(photoImg);
