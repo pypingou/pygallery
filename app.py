@@ -125,8 +125,8 @@ def scan_photos_and_generate_thumbnails():
 
     with app.test_request_context(
         path=external_script_name, # Internal path Flask sees (e.g., '/')
-        base_url=f"{external_scheme}://{external_server}:{external_port}" # Full external base URL
-        # Removed url_scheme=external_scheme here to avoid AssertionError
+        # NEW: base_url includes the SCRIPT_NAME (e.g., /gallery)
+        base_url=f"{external_scheme}://{external_server}:{external_port}{os.environ.get('SCRIPT_NAME', '/')}"
     ):
         # Ensure SCRIPT_NAME is set in the test context
         request.environ['SCRIPT_NAME'] = external_script_name
@@ -282,7 +282,7 @@ if __name__ == '__main__':
     # This will ensure url_for generates correct URLs (internal to the Flask app).
     with app.test_request_context(
         path=os.environ['SCRIPT_NAME'], # Path is the app's root, e.g., '/'
-        base_url=f"{os.environ['wsgi.url_scheme']}://{os.environ['SERVER_NAME']}:{os.environ['SERVER_PORT']}"
+        base_url=f"{os.environ['wsgi.url_scheme']}://{os.environ['SERVER_NAME']}:{os.environ['SERVER_PORT']}{os.environ['SCRIPT_NAME']}" # NEW: SCRIPT_NAME added to base_url
     ):
         request.environ['SCRIPT_NAME'] = os.environ['SCRIPT_NAME'] # Ensure SCRIPT_NAME is set in test context
         app.gallery_data = scan_photos_and_generate_thumbnails() # Call function without base_url_prefix argument
