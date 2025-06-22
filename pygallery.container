@@ -30,10 +30,8 @@ PublishPort=8000:5000
 # Choose an IP address that is within the subnet range of 'my_gallery_network'.
 # StaticIP=10.89.0.10 # Uncomment and set a specific IP if desired
 
-# Set environment variables for the container.
-# SCRIPT_NAME: This tells Gunicorn (and thus Flask via ProxyFix) its application mount point.
-# It should be set to '/' as the Flask app itself runs at the root within the container.
-Environment=SCRIPT_NAME=/
+# Removed Environment=SCRIPT_NAME here, as SCRIPT_NAME is now set directly in Dockerfile CMD.
+# Removed Environment=BASE_URL_PREFIX here, as it's not needed by app.py's runtime logic.
 
 [Unit]
 # Description for the systemd service

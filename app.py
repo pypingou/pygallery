@@ -9,7 +9,6 @@ import time
 from werkzeug.middleware.proxy_fix import ProxyFix # Import ProxyFix
 
 # --- Configuration ---
-# Removed BASE_URL_PREFIX from app_config, as the app is agnostic to it.
 app_config = {}
 
 def load_config():
@@ -29,17 +28,13 @@ def load_config():
         exit(1)
 
     try:
-        app_config['PHOTOS_DIR'] = config['Gallery'].get('PHOTOS_DIR', './photos')
-        app_config['THUMBNAILS_DIR'] = config['Gallery'].get('THUMBNAILS_DIR', './thumbnails')
+        app_config['PHOTOS_DIR'] = Path(config['Gallery'].get('PHOTOS_DIR', './photos')).resolve()
+        app_config['THUMBNAILS_DIR'] = Path(config['Gallery'].get('THUMBNAILS_DIR', './thumbnails')).resolve()
         app_config['THUMBNAIL_SIZE'] = tuple(map(int, config['Gallery'].get('THUMBNAIL_SIZE', '200,200').split(',')))
         app_config['PORT'] = int(config['Gallery'].get('PORT', '5000'))
     except ValueError as e:
         print(f"Error parsing configuration: {e}")
         exit(1)
-
-    # Ensure paths are absolute for safety, or relative to the app's root
-    app_config['PHOTOS_DIR'] = Path(app_config['PHOTOS_DIR']).resolve()
-    app_config['THUMBNAILS_DIR'] = Path(app_config['THUMBNAILS_DIR']).resolve()
 
     print(f"Configuration loaded: {app_config}")
 
@@ -47,24 +42,18 @@ def load_config():
 load_config()
 
 # Initialize Flask app - it will internally run at root '/'
-# Static files are handled by the blueprint's static_folder/static_url_path.
 app = Flask(__name__)
 
 # --- Apply ProxyFix to the Flask application ---
-# This middleware is crucial. It corrects Flask's understanding of the request environment
-# based on X-Forwarded-* headers (like X-Forwarded-Proto, X-Forwarded-Prefix).
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_prefix=1, x_proto=1)
 
 # --- Create a Blueprint for the gallery ---
-# The blueprint's URL prefix is now its internal path relative to app root.
-# We define the static folder and its URL path here, relative to the blueprint.
 gallery_bp = Blueprint('gallery', __name__,
                        template_folder='templates',
                        static_folder='static', # Refers to the 'static' directory relative to app.py
                        static_url_path='/static') # This makes the blueprint's static files available at /static relative to its own root
 
-# --- Thumbnail Generation Logic ---
-# Supported image extensions
+# --- Image Handling Logic ---
 IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.webp')
 
 def is_image_file(filename):
@@ -77,124 +66,51 @@ def get_or_create_thumbnail(image_path: Path, thumbnail_path: Path, size: tuple)
     """
     thumbnail_path.parent.mkdir(parents=True, exist_ok=True)
     if thumbnail_path.exists():
-        return
-    print(f"Generating thumbnail for {image_path}...")
+        return # Thumbnail already exists
+    
     try:
         with Image.open(image_path) as img:
             img.thumbnail(size)
             img.save(thumbnail_path)
-        print(f"Thumbnail saved to {thumbnail_path}")
     except Exception as e:
         print(f"Error generating thumbnail for {image_path}: {e}")
 
-# IMPORTANT: base_url_prefix is NOT used directly for URL construction in this function anymore.
-# We rely on url_for within a test_request_context for correct URL generation.
-def scan_photos_and_generate_thumbnails():
+# NEW: Function to scan and generate all missing thumbnails at startup
+def scan_and_generate_all_thumbnails():
     """
-    Scans the PHOTOS_DIR for albums and photos.
-    Generates thumbnails and populates gallery data with URLs.
-    URLs are generated using url_for within a test context simulating proxy.
+    Scans the PHOTOS_DIR for all images and generates missing thumbnails.
+    This runs at application startup.
     """
-    print("Starting photo scan and thumbnail generation...")
-    gallery_data = {}
-
+    print(f"--- Starting initial thumbnail generation scan for '{app_config['PHOTOS_DIR']}' ---")
     photos_root = app_config['PHOTOS_DIR']
     thumbnails_root = app_config['THUMBNAILS_DIR']
     thumbnail_size = app_config['THUMBNAIL_SIZE']
-    
-    thumbnails_root.mkdir(parents=True, exist_ok=True)
 
-    # Re-introducing test_request_context around the scan_photos_and_generate_thumbnails logic
-    # within the app.py's main execution block. This ensures url_for works at startup.
-    # The parameters for base_url and url_scheme are set to simulate the deployed environment
-    # where Flask runs internally at '/' and Apache handles external prefix/HTTPS.
-    # SCRIPT_NAME will be effectively '/' for url_for in this context.
-    # NEW: Use external_scheme, external_server, external_prefix for base_url and url_for
-    external_scheme = os.environ.get('wsgi.url_scheme', 'http') # 'https' when proxied by Apache
-    external_server = os.environ.get('SERVER_NAME', 'localhost') # 'example.com' when proxied by Apache
-    external_port = os.environ.get('SERVER_PORT', str(app_config['PORT'])) # '443' when proxied by Apache
-    # SCRIPT_NAME is '/' internally, but for url_for to generate *external* URLs,
-    # ProxyFix uses X-Forwarded-Prefix. So, we simulate the external prefix for url_for to work.
-    # This prefix comes from X-Forwarded-Prefix set by Apache, or from ENVIRONMENT in test context.
-    external_script_name = os.environ.get('SCRIPT_NAME', '/') # This is the app's *internal* root.
-                                                              # For url_for to generate external URLs,
-                                                              # it needs to be aware of the external prefix.
-                                                              # This is why we use _external=True and
-                                                              # ensure the test_request_context's base_url is full external.
+    if not photos_root.is_dir():
+        print(f"Warning: PHOTOS_DIR '{photos_root}' does not exist or is not a directory. Skipping initial thumbnail scan.")
+        return
 
+    thumbnails_root.mkdir(parents=True, exist_ok=True) # Ensure root thumbnail dir exists
 
-    with app.test_request_context(
-        path=external_script_name, # Internal path Flask sees (e.g., '/')
-        # NEW: base_url includes the SCRIPT_NAME (e.g., /gallery)
-        base_url=f"{external_scheme}://{external_server}:{external_port}{os.environ.get('SCRIPT_NAME', '/')}"
-    ):
-        # Ensure SCRIPT_NAME is set in the test context
-        request.environ['SCRIPT_NAME'] = external_script_name
-        request.environ['SERVER_NAME'] = external_server
-        request.environ['SERVER_PORT'] = external_port
-        request.environ['wsgi.url_scheme'] = external_scheme
-
-
-        for dirpath, dirnames, filenames in os.walk(photos_root):
+    for dirpath, dirnames, filenames in os.walk(photos_root):
+        current_dir_images = [f for f in filenames if is_image_file(f)]
+        
+        if current_dir_images:
             relative_path = Path(dirpath).relative_to(photos_root)
-            album_name = str(relative_path).replace(os.sep, '/')
+            album_thumbnail_dir = thumbnails_root / relative_path
+            album_thumbnail_dir.mkdir(parents=True, exist_ok=True) # Ensure album thumbnail dir exists
 
-            current_dir_images = [f for f in filenames if is_image_file(f)]
-
-            if current_dir_images:
-                print(f"Processing album: {album_name if album_name != '.' else 'root'}")
-
-                if album_name not in gallery_data:
-                    gallery_data[album_name] = {
-                        "cover_thumbnail_url": "",
-                        "photos": []
-                    }
-
-                album_photos = []
-                album_thumbnail_dir = thumbnails_root / relative_path
-                album_thumbnail_dir.mkdir(parents=True, exist_ok=True)
-
-                current_dir_images.sort(key=lambda x: x.lower())
-
-                for photo_filename in current_dir_images:
-                    photo_path = Path(dirpath) / photo_filename
-                    thumbnail_path = album_thumbnail_dir / photo_filename
-
+            for photo_filename in current_dir_images:
+                photo_path = Path(dirpath) / photo_filename
+                thumbnail_path = album_thumbnail_dir / photo_filename
+                
+                # Only call get_or_create_thumbnail if it's a file and not already a thumbnail
+                if photo_path.is_file():
                     get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
+    print("--- Initial thumbnail generation scan complete ---")
 
-                    # NEW: Use _external=True with url_for to generate absolute URLs
-                    # ProxyFix and the context will ensure the correct domain/scheme/prefix.
-                    original_url = url_for('gallery.serve_photo', filename=f"{album_name}/{photo_filename}" if album_name != '.' else photo_filename, _external=True)
-                    thumb_url = url_for('gallery.serve_thumbnail', filename=f"{album_name}/{photo_filename}" if album_name != '.' else photo_filename, _external=True)
 
-                    album_photos.append({
-                        "original_filename": photo_filename,
-                        "original_url": original_url,
-                        "thumbnail_url": thumb_url
-                    })
-
-                gallery_data[album_name]["photos"].extend(album_photos)
-
-                if not gallery_data[album_name]["cover_thumbnail_url"] and album_photos:
-                     gallery_data[album_name]["cover_thumbnail_url"] = album_photos[0]["thumbnail_url"]
-                elif not gallery_data[album_name]["cover_thumbnail_url"]:
-                    # Use _external=True for placeholder as well
-                    gallery_data[album_name]["cover_thumbnail_url"] = url_for('gallery.static', filename='placeholder.png', _external=True)
-
-    # Clean up empty albums that might have been created but had no photos
-    gallery_data = {k: v for k, v in gallery_data.items() if v["photos"]}
-
-    print("Photo scan and thumbnail generation complete.")
-    return gallery_data
-
-# --- Flask Routes (now defined on the Blueprint) ---
-
-# Store gallery data globally after initial scan
-app.gallery_data = {}
-
-# Call initial_scan is now done within the context of os.environ setup in __main__
-# It is important that this call happens after environment variables for url_for are set.
-
+# --- API Endpoints ---
 
 @gallery_bp.route('/')
 def index():
@@ -208,26 +124,120 @@ def album_page(album_name):
 
 @gallery_bp.route('/api/albums')
 def api_albums():
-    """Returns a JSON list of all albums."""
+    """
+    Returns a JSON list of all albums by scanning the PHOTOS_DIR on demand.
+    Thumbnails are assumed to be mostly pre-generated.
+    """
+    print(f"\n--- API albums requested ---")
+    print(f"Request URL: {request.url}")
+    print(f"Request script_root: {request.script_root}")
+    print(f"os.environ SCRIPT_NAME: {os.environ.get('SCRIPT_NAME')}")
+    print(f"PHOTOS_DIR: {app_config['PHOTOS_DIR']}")
+    
     albums_list = []
-    for album_name, data in app.gallery_data.items():
-        display_name = album_name if album_name != '.' else 'Root Gallery'
-        albums_list.append({
-            "name": album_name,
-            "display_name": display_name,
-            "cover_thumbnail_url": data["cover_thumbnail_url"],
-            "photo_count": len(data["photos"])
-        })
+    photos_root = app_config['PHOTOS_DIR']
+    thumbnail_size = app_config['THUMBNAIL_SIZE'] # Needed for on-demand thumbnail creation
+
+    if not photos_root.is_dir():
+        print(f"Error: PHOTOS_DIR '{photos_root}' does not exist or is not a directory. Returning empty albums.")
+        return jsonify([])
+
+    found_albums_data = {} # {album_path_str: {"cover_url": "", "photo_count": 0}}
+
+    try:
+        for dirpath, dirnames, filenames in os.walk(photos_root):
+            current_dir_images = [f for f in filenames if is_image_file(f)]
+            
+            if current_dir_images: # Only consider directories that contain images as albums
+                try:
+                    relative_path = Path(dirpath).relative_to(photos_root)
+                    album_name_key = str(relative_path).replace(os.sep, '/') # Use '/' for consistent keys
+
+                    # Sort images to find the first one for cover if needed
+                    current_dir_images.sort(key=lambda x: x.lower())
+                    first_image_filename = current_dir_images[0]
+                    
+                    # Ensure thumbnail for cover image exists (on-demand generation)
+                    album_thumbnail_dir = app_config['THUMBNAILS_DIR'] / relative_path
+                    cover_image_path = Path(dirpath) / first_image_filename
+                    cover_thumbnail_path = album_thumbnail_dir / first_image_filename
+                    get_or_create_thumbnail(cover_image_path, cover_thumbnail_path, thumbnail_size)
+
+                    # Construct the internal URL for the cover thumbnail
+                    # This will be resolved by ProxyFix to the external URL
+                    cover_thumbnail_url = url_for('gallery.serve_thumbnail', filename=f"{album_name_key}/{first_image_filename}" if album_name_key != '.' else first_image_filename, _external=True)
+
+                    found_albums_data[album_name_key] = {
+                        "name": album_name_key,
+                        "display_name": album_name_key if album_name_key != '.' else 'Root Gallery',
+                        "cover_thumbnail_url": cover_thumbnail_url,
+                        "photo_count": len(current_dir_images)
+                    }
+                    print(f"  Found album: {album_name_key} with {len(current_dir_images)} photos. Cover: {cover_thumbnail_url}") # For debugging
+                except Exception as e:
+                    print(f"Error processing album directory {dirpath}: {e}")
+                    import traceback
+                    traceback.print_exc() # Print full traceback for errors in walk
+        print(f"Finished os.walk for {photos_root}")
+    except Exception as e:
+        print(f"Unhandled error during os.walk on {photos_root}: {e}")
+        import traceback
+        traceback.print_exc() # Print full traceback for os.walk errors
+
+    # Convert found_albums_data to a list and sort
+    albums_list = list(found_albums_data.values())
     albums_list.sort(key=lambda x: x['display_name'].lower())
+    
+    print(f"API albums response: Found {len(albums_list)} albums.")
     return jsonify(albums_list)
+
 
 @gallery_bp.route('/api/album/<path:album_name>/photos')
 def api_album_photos(album_name):
-    """Returns a JSON list of photos for a specific album."""
-    album_data = app.gallery_data.get(album_name)
-    if album_data:
-        return jsonify(album_data["photos"])
-    return jsonify({"error": "Album not found"}), 404
+    """
+    Returns a JSON list of photos for a specific album by scanning the directory.
+    This is now done on demand for each API request.
+    """
+    print(f"\n--- API photos requested for album: {album_name} ---")
+    album_photos_list = []
+    photos_root = app_config['PHOTOS_DIR']
+    thumbnails_root = app_config['THUMBNAILS_DIR']
+    thumbnail_size = app_config['THUMBNAIL_SIZE']
+
+    # Resolve the full path to the specific album directory on disk
+    album_dir_path = photos_root / album_name
+    album_thumbnail_dir = thumbnails_root / album_name
+
+    if not album_dir_path.is_dir():
+        print(f"API photos for album '{album_name}': Album directory not found or not a directory: {album_dir_path}")
+        return jsonify({"error": "Album not found"}), 404
+
+    try:
+        for photo_filename in os.listdir(album_dir_path):
+            photo_path = album_dir_path / photo_filename
+            if photo_path.is_file() and is_image_file(photo_filename):
+                thumbnail_path = album_thumbnail_dir / photo_filename
+
+                get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size) # On-demand thumbnail creation
+
+                # Construct URLs (absolute using _external=True)
+                original_url = url_for('gallery.serve_photo', filename=f"{album_name}/{photo_filename}", _external=True)
+                thumb_url = url_for('gallery.serve_thumbnail', filename=f"{album_name}/{photo_filename}", _external=True)
+
+                album_photos_list.append({
+                    "original_filename": photo_filename,
+                    "original_url": original_url,
+                    "thumbnail_url": thumb_url
+                })
+        album_photos_list.sort(key=lambda x: x['original_filename'].lower())
+        print(f"API photos for album '{album_name}': Found {len(album_photos_list)} photos.")
+        return jsonify(album_photos_list)
+    except Exception as e:
+        print(f"Error listing photos in album {album_name}: {e}")
+        import traceback
+        traceback.print_exc() # Print full traceback for errors in listing
+        return jsonify({"error": "Error processing album photos"}), 500
+
 
 @gallery_bp.route('/photos/<path:filename>')
 def serve_photo(filename):
@@ -235,11 +245,12 @@ def serve_photo(filename):
     full_photo_path_in_root = app_config['PHOTOS_DIR'] / filename
 
     if not full_photo_path_in_root.is_file():
+        print(f"Serve photo: File not found - {full_photo_path_in_root}")
         return "Photo not found", 404
 
     directory_to_serve_from = full_photo_path_in_root.parent
     file_base_name = full_photo_path_in_root.name
-
+    print(f"Serving photo: {full_photo_path_in_root}")
     return send_from_directory(directory_to_serve_from, file_base_name)
 
 @gallery_bp.route('/thumbnails/<path:filename>')
@@ -248,46 +259,35 @@ def serve_thumbnail(filename):
     full_thumbnail_path_in_root = app_config['THUMBNAILS_DIR'] / filename
 
     if not full_thumbnail_path_in_root.is_file():
+        print(f"Serve thumbnail: File not found - {full_thumbnail_path_in_root}")
         return "Thumbnail not found", 404
 
     directory_to_serve_from = full_thumbnail_path_in_root.parent
     file_base_name = full_thumbnail_path_in_root.name
-
+    print(f"Serving thumbnail: {full_thumbnail_path_in_root}")
     return send_from_directory(directory_to_serve_from, file_base_name)
 
 # Register the blueprint with the main Flask application.
-# The url_prefix for the blueprint is NOT explicitly set here.
-# It will be derived by Flask at runtime from the SCRIPT_NAME environment variable
-# (which Gunicorn/Apache set) combined with ProxyFix.
-# The blueprint's routes will internally act as if they are at the app's internal root.
 app.register_blueprint(gallery_bp)
 
 
 # --- Main execution ---
 if __name__ == '__main__':
+    # Ensure root photo and thumbnail directories exist
+    app_config['PHOTOS_DIR'].mkdir(parents=True, exist_ok=True)
+    app_config['THUMBNAILS_DIR'].mkdir(parents=True, exist_ok=True)
+
     # For local development, simulate the SCRIPT_NAME and SERVER_NAME
     # that Gunicorn/Apache would provide in a deployed environment.
-    # This allows url_for to generate correct URLs during initial scan.
-    # The SCRIPT_NAME will determine the effective "APPLICATION_ROOT" for url_for.
-    # The SERVER_NAME will determine the hostname.
-    # For local testing, SCRIPT_NAME should be '/' as the app runs internally at root.
-    # Ensure all required environment variables are set before trying to access them
-    # and before calling scan_photos_and_generate_thumbnails.
+    # This allows url_for to generate correct URLs.
     os.environ['SCRIPT_NAME'] = os.environ.get('SCRIPT_NAME', '/') # Internal root
     os.environ['SERVER_NAME'] = os.environ.get('SERVER_NAME', 'localhost')
     os.environ['SERVER_PORT'] = os.environ.get('SERVER_PORT', str(app_config['PORT']))
     os.environ['wsgi.url_scheme'] = os.environ.get('wsgi.url_scheme', 'http') # Default to http for local
 
-    # Call scan_photos_and_generate_thumbnails directly at startup, wrapped in test_request_context
-    # This will ensure url_for generates correct URLs (internal to the Flask app).
-    with app.test_request_context(
-        path=os.environ['SCRIPT_NAME'], # Path is the app's root, e.g., '/'
-        base_url=f"{os.environ['wsgi.url_scheme']}://{os.environ['SERVER_NAME']}:{os.environ['SERVER_PORT']}{os.environ['SCRIPT_NAME']}" # NEW: SCRIPT_NAME added to base_url
-    ):
-        request.environ['SCRIPT_NAME'] = os.environ['SCRIPT_NAME'] # Ensure SCRIPT_NAME is set in test context
-        app.gallery_data = scan_photos_and_generate_thumbnails() # Call function without base_url_prefix argument
-
-
+    # Call the initial thumbnail generation scan at startup
+    scan_and_generate_all_thumbnails()
+    
     print(f"Starting Flask app on {os.environ.get('wsgi.url_scheme', 'http')}://{os.environ.get('SERVER_NAME', 'localhost')}:{os.environ.get('SERVER_PORT', '5000')}{os.environ.get('SCRIPT_NAME', '/')}")
     app.run(host='0.0.0.0', port=app_config['PORT'], debug=True)
 

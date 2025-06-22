@@ -131,7 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateLightboxImage() {
         if (currentAlbumPhotos.length > 0 && currentPhotoIndex >= 0 && currentPhotoIndex < currentAlbumPhotos.length) {
             const photo = currentAlbumPhotos[currentPhotoIndex];
-            lightboxImg.src = photo.original_url;
+            lightboxImg.src = photo.original_url; // This URL comes directly from Flask
             lightboxImg.alt = photo.original_filename;
 
             prevBtn.style.display = (currentPhotoIndex > 0) ? 'flex' : 'none';
@@ -176,7 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentAlbumPhotos.length > 0 && currentAlbumName) {
             const photo = currentAlbumPhotos[currentPhotoIndex];
             // Construct the shareable URL using the full current window location origin + derived prefix
-            // The BASE_URL_PREFIX from getBaseUrlPrefix() is already included in window.location.origin for shared links
+            // window.location.pathname already includes the BASE_URL_PREFIX if it exists.
             const shareUrl = `${window.location.origin}${window.location.pathname.split('?')[0]}?image=${encodeURIComponent(photo.original_filename)}`;
 
             const tempInput = document.createElement('input');
@@ -305,7 +305,8 @@ async function fetchPhotos(albumName) {
             photoImg.src = photo.thumbnail_url; // This URL comes directly from Flask
             photoImg.alt = photo.original_filename;
             photoImg.onerror = () => {
-                albumImg.src = `${BASE_URL_PREFIX}/static/placeholder.png`;
+                // The placeholder URL should also be absolute from the domain root
+                photoImg.src = `${BASE_URL_PREFIX}/static/placeholder.png`;
             };
 
             photoThumbnailDiv.appendChild(photoImg);
