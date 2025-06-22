@@ -128,15 +128,20 @@ def api_albums():
     Returns a JSON list of all albums by scanning the PHOTOS_DIR on demand.
     Thumbnails are assumed to be mostly pre-generated.
     """
-    print(f"\n--- API albums requested ---")
+    print(f"\n--- API albums requested (RUNTIME) ---")
     print(f"Request URL: {request.url}")
-    print(f"Request script_root: {request.script_root}")
-    print(f"os.environ SCRIPT_NAME: {os.environ.get('SCRIPT_NAME')}")
+    print(f"Request base_url: {request.base_url}")
+    print(f"Request url_root: {request.url_root}")
+    print(f"Request script_root: {request.script_root}") # This should be the prefix or '/'
+    print(f"request.environ['SERVER_NAME']: {request.environ.get('SERVER_NAME')}")
+    print(f"request.environ['SERVER_PORT']: {request.environ.get('SERVER_PORT')}")
+    print(f"request.environ['wsgi.url_scheme']: {request.environ.get('wsgi.url_scheme')}")
+    print(f"os.environ SCRIPT_NAME (from Docker/Quadlet): {os.environ.get('SCRIPT_NAME')}") # What Gunicorn gets
     print(f"PHOTOS_DIR: {app_config['PHOTOS_DIR']}")
     
     albums_list = []
     photos_root = app_config['PHOTOS_DIR']
-    thumbnail_size = app_config['THUMBNAIL_SIZE'] # Needed for on-demand thumbnail creation
+    thumbnail_size = app_config['THUMBNAIL_SIZE']
 
     if not photos_root.is_dir():
         print(f"Error: PHOTOS_DIR '{photos_root}' does not exist or is not a directory. Returning empty albums.")
@@ -161,11 +166,16 @@ def api_albums():
                     album_thumbnail_dir = app_config['THUMBNAILS_DIR'] / relative_path
                     cover_image_path = Path(dirpath) / first_image_filename
                     cover_thumbnail_path = album_thumbnail_dir / first_image_filename
+
                     get_or_create_thumbnail(cover_image_path, cover_thumbnail_path, thumbnail_size)
 
                     # Construct the internal URL for the cover thumbnail
-                    # This will be resolved by ProxyFix to the external URL
-                    cover_thumbnail_url = url_for('gallery.serve_thumbnail', filename=f"{album_name_key}/{first_image_filename}" if album_name_key != '.' else first_image_filename, _external=True)
+                    # Use _external=True to generate absolute URLs based on the current request context
+                    # Correct filename construction for url_for to handle root album
+                    serve_filename_for_url = first_image_filename if album_name_key == '.' else f"{album_name_key}/{first_image_filename}"
+                    
+                    cover_thumbnail_url = url_for('gallery.serve_thumbnail', filename=serve_filename_for_url, _external=True)
+                    print(f"  Generated URL for {album_name_key} cover: {cover_thumbnail_url}")
 
                     found_albums_data[album_name_key] = {
                         "name": album_name_key,
@@ -173,16 +183,16 @@ def api_albums():
                         "cover_thumbnail_url": cover_thumbnail_url,
                         "photo_count": len(current_dir_images)
                     }
-                    print(f"  Found album: {album_name_key} with {len(current_dir_images)} photos. Cover: {cover_thumbnail_url}") # For debugging
+                    print(f"  Found album: {album_name_key} with {len(current_dir_images)} photos.")
                 except Exception as e:
                     print(f"Error processing album directory {dirpath}: {e}")
                     import traceback
-                    traceback.print_exc() # Print full traceback for errors in walk
+                    traceback.print_exc()
         print(f"Finished os.walk for {photos_root}")
     except Exception as e:
         print(f"Unhandled error during os.walk on {photos_root}: {e}")
         import traceback
-        traceback.print_exc() # Print full traceback for os.walk errors
+        traceback.print_exc()
 
     # Convert found_albums_data to a list and sort
     albums_list = list(found_albums_data.values())
@@ -198,13 +208,19 @@ def api_album_photos(album_name):
     Returns a JSON list of photos for a specific album by scanning the directory.
     This is now done on demand for each API request.
     """
-    print(f"\n--- API photos requested for album: {album_name} ---")
+    print(f"\n--- API photos requested for album: {album_name} (RUNTIME) ---")
+    print(f"Request URL: {request.url}")
+    print(f"Request base_url: {request.base_url}")
+    print(f"Request script_root: {request.script_root}")
+    print(f"Request url_root: {request.url_root}")
+    
     album_photos_list = []
     photos_root = app_config['PHOTOS_DIR']
     thumbnails_root = app_config['THUMBNAILS_DIR']
     thumbnail_size = app_config['THUMBNAIL_SIZE']
 
     # Resolve the full path to the specific album directory on disk
+    # This correctly handles album_name='.'
     album_dir_path = photos_root / album_name
     album_thumbnail_dir = thumbnails_root / album_name
 
@@ -221,8 +237,11 @@ def api_album_photos(album_name):
                 get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size) # On-demand thumbnail creation
 
                 # Construct URLs (absolute using _external=True)
-                original_url = url_for('gallery.serve_photo', filename=f"{album_name}/{photo_filename}", _external=True)
-                thumb_url = url_for('gallery.serve_thumbnail', filename=f"{album_name}/{photo_filename}", _external=True)
+                # url_for needs filename to be relative to the PHOTOS_DIR/THUMBNAILS_DIR root
+                serve_filename_for_url = photo_filename if album_name == '.' else f"{album_name}/{photo_filename}"
+                original_url = url_for('gallery.serve_photo', filename=serve_filename_for_url, _external=True)
+                thumb_url = url_for('gallery.serve_thumbnail', filename=serve_filename_for_url, _external=True)
+                print(f"  Generated URL for {photo_filename} thumbnail: {thumb_url}")
 
                 album_photos_list.append({
                     "original_filename": photo_filename,
@@ -235,13 +254,15 @@ def api_album_photos(album_name):
     except Exception as e:
         print(f"Error listing photos in album {album_name}: {e}")
         import traceback
-        traceback.print_exc() # Print full traceback for errors in listing
+        traceback.print_exc()
         return jsonify({"error": "Error processing album photos"}), 500
 
 
 @gallery_bp.route('/photos/<path:filename>')
 def serve_photo(filename):
     """Serves original photo files. Filename now includes album subpaths."""
+    # This route expects filename to be the full path relative to app_config['PHOTOS_DIR']
+    # e.g., 'image.jpg' or 'USA/2010/10/image.jpg'
     full_photo_path_in_root = app_config['PHOTOS_DIR'] / filename
 
     if not full_photo_path_in_root.is_file():
@@ -256,6 +277,7 @@ def serve_photo(filename):
 @gallery_bp.route('/thumbnails/<path:filename>')
 def serve_thumbnail(filename):
     """Serves generated thumbnail files. Filename now includes album subpaths."""
+    # This route expects filename to be the full path relative to app_config['THUMBNAILS_DIR']
     full_thumbnail_path_in_root = app_config['THUMBNAILS_DIR'] / filename
 
     if not full_thumbnail_path_in_root.is_file():
@@ -286,8 +308,14 @@ if __name__ == '__main__':
     os.environ['wsgi.url_scheme'] = os.environ.get('wsgi.url_scheme', 'http') # Default to http for local
 
     # Call the initial thumbnail generation scan at startup
-    scan_and_generate_all_thumbnails()
-    
+    # This runs within a dummy request context so url_for works for local scan_and_generate_all_thumbnails calls.
+    with app.test_request_context(
+        path=os.environ['SCRIPT_NAME'], # Path is the app's root, e.g., '/'
+        base_url=f"{os.environ['wsgi.url_scheme']}://{os.environ['SERVER_NAME']}:{os.environ['SERVER_PORT']}"
+    ):
+        request.environ['SCRIPT_NAME'] = os.environ['SCRIPT_NAME'] # Ensure SCRIPT_NAME is set
+        scan_and_generate_all_thumbnails() # This function now just generates thumbnails
+
     print(f"Starting Flask app on {os.environ.get('wsgi.url_scheme', 'http')}://{os.environ.get('SERVER_NAME', 'localhost')}:{os.environ.get('SERVER_PORT', '5000')}{os.environ.get('SCRIPT_NAME', '/')}")
     app.run(host='0.0.0.0', port=app_config['PORT'], debug=True)
 
