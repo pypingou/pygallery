@@ -20,10 +20,20 @@
         <section id="album-list" class="grid-container"></section>
     </main>
 
-    <!-- The Lightbox Modal for large images -->
+    <!-- The Lightbox Modal for large images - NOW IN INDEX.HTML -->
     <div id="lightbox" class="lightbox" onclick="closeLightbox()">
         <span class="close-btn">&times;</span>
+        <!-- Navigation buttons -->
+        <a class="lightbox-nav-btn prev-btn" id="prev-photo-btn">&#10094;</a>
         <img id="lightbox-img" class="lightbox-content" src="" alt="Full size image">
+        <a class="lightbox-nav-btn next-btn" id="next-photo-btn">&#10095;</a>
+        <!-- Download and Share buttons -->
+        <div class="lightbox-controls-bottom">
+            <button class="download-btn" id="download-photo-btn">Download</button>
+            <button class="share-btn" id="share-photo-btn">Share Link</button>
+        </div>
+        <!-- Message box for copy confirmation -->
+        <div id="message-box" class="message-box"></div>
     </div>
 
     <footer class="footer">

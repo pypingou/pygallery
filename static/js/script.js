@@ -50,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Lightbox functionality
     const lightbox = document.getElementById('lightbox');
     const lightboxImg = document.getElementById('lightbox-img');
+    // NEW: Get references to buttons only if they exist
     const closeBtn = document.querySelector('.close-btn');
     const prevBtn = document.getElementById('prev-photo-btn');
     const nextBtn = document.getElementById('next-photo-btn');
@@ -57,10 +58,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const shareBtn = document.getElementById('share-photo-btn');
     const messageBox = document.getElementById('message-box');
 
-    closeBtn.addEventListener('click', (event) => {
-        event.stopPropagation();
-        closeLightbox();
-    });
+    // Attach event listeners only if elements are found
+    // This makes the script robust against pages where the lightbox isn't present (e.g., if you had a different page layout)
+    if (closeBtn) {
+        closeBtn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            closeLightbox();
+        });
+    }
 
     if (prevBtn) {
         prevBtn.addEventListener('click', (event) => {
@@ -89,14 +94,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    lightbox.addEventListener('click', (event) => {
-        if (event.target === lightbox) {
-            closeLightbox();
-        }
-    });
+    if (lightbox) {
+        lightbox.addEventListener('click', (event) => {
+            if (event.target === lightbox) {
+                closeLightbox();
+            }
+        });
+    }
 
     document.addEventListener('keydown', (event) => {
-        if (lightbox.classList.contains('active')) {
+        if (lightbox && lightbox.classList.contains('active')) {
             if (event.key === 'ArrowLeft') {
                 showPrevPhoto();
             } else if (event.key === 'ArrowRight') {
@@ -107,28 +114,46 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // openLightbox function - now guarantees elements exist as it's the entry point to lightbox interaction
     window.openLightbox = (index, photosArray) => {
+        // Essential check: if lightbox or its image element is missing, log error and exit.
+        if (!lightbox || !lightboxImg) {
+            console.error("Lightbox elements not found. Cannot open lightbox.");
+            return;
+        }
         currentPhotoIndex = index;
         currentAlbumPhotos = photosArray;
 
         lightbox.style.display = 'flex'; 
         updateLightboxImage(); 
 
+        // Request animation frame for smooth transition
         requestAnimationFrame(() => {
             lightbox.classList.add('active');
         });
     };
 
     window.closeLightbox = () => {
+        if (!lightbox || !lightboxImg) {
+            console.error("Lightbox elements not found. Cannot close lightbox.");
+            return;
+        }
         lightbox.classList.remove('active');
         setTimeout(() => {
             lightbox.style.display = 'none';
             lightboxImg.src = ''; 
-        }, 300);
+        }, 300); // Match CSS transition duration
     };
 
+    // Helper function that updates the displayed image and navigation buttons
     function updateLightboxImage() {
         console.log("updateLightboxImage called. Index:", currentPhotoIndex);
+        // Ensure all required elements are available before trying to use them
+        if (!lightboxImg || !prevBtn || !nextBtn || !downloadBtn) {
+             console.warn("updateLightboxImage: Required lightbox elements (img, nav, download) not found. Skipping update.");
+             return;
+        }
+
         if (currentAlbumPhotos.length > 0 && currentPhotoIndex >= 0 && currentPhotoIndex < currentAlbumPhotos.length) {
             const photo = currentAlbumPhotos[currentPhotoIndex];
             console.log("Setting lightbox src to:", photo.original_url);
@@ -142,25 +167,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 downloadBtn.setAttribute('download', photo.original_filename);
             }
         } else {
-            console.warn("updateLightboxImage: No photos data or invalid index.");
+            console.warn("updateLightboxImage: No photos data or invalid index. Cannot update lightbox image.");
         }
     }
 
     function showNextPhoto() {
-        if (currentPhotoIndex < currentAlbumPhotos.length - 1) {
+        if (currentAlbumPhotos.length > 0 && currentPhotoIndex < currentAlbumPhotos.length - 1) {
             currentPhotoIndex++;
             updateLightboxImage();
         }
     }
 
     function showPrevPhoto() {
-        if (currentPhotoIndex > 0) {
+        if (currentAlbumPhotos.length > 0 && currentPhotoIndex > 0) {
             currentPhotoIndex--;
             updateLightboxImage();
         }
     }
 
     function downloadCurrentImage() {
+        if (!downloadBtn) { console.warn("downloadCurrentImage: Download button not found."); return; }
         if (currentAlbumPhotos.length > 0) {
             const photo = currentAlbumPhotos[currentPhotoIndex];
             const imageUrl = photo.original_url;
@@ -172,10 +198,16 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
+        } else {
+            console.warn("downloadCurrentImage: No photos data available.");
         }
     }
 
     function copyShareLink() {
+        if (!shareBtn || !messageBox) { // Safety check
+            console.warn("copyShareLink: Share button or message box not found.");
+            return;
+        }
         if (currentAlbumPhotos.length > 0 && currentAlbumName) {
             const photo = currentAlbumPhotos[currentPhotoIndex];
             const albumNameForUrl = currentAlbumName; 
@@ -195,6 +227,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     messageBox.classList.remove('show');
                 }, 3000);
             }
+        } else {
+            console.warn("copyShareLink: No photos data or album name available.");
         }
     }
 
@@ -230,9 +264,9 @@ async function fetchAlbums() {
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        const data = await response.json(); // Data now contains mode and either albums or photos
+        const data = await response.json();
 
-        albumListDiv.innerHTML = ''; // Clear loading message
+        albumListDiv.innerHTML = '';
 
         if (data.mode === 'flat_gallery') {
             console.log("Rendering flat gallery directly on index page.");
@@ -241,11 +275,9 @@ async function fetchAlbums() {
                 albumListDiv.innerHTML = '<p style="text-align: center; width: 100%;">No photos found in the root directory.</p>';
                 return;
             }
-            // Hide the back button if it exists on index page (it shouldn't, but for safety)
             const backNav = document.querySelector('.back-nav');
             if (backNav) backNav.style.display = 'none';
 
-            // Render photos directly into the albumListDiv
             photos.forEach((photo, index) => {
                 const photoThumbnailDiv = document.createElement('div');
                 photoThumbnailDiv.classList.add('photo-thumbnail');
@@ -262,14 +294,12 @@ async function fetchAlbums() {
                 // Set currentAlbumName to '__root__' when rendering flat gallery
                 // This ensures lightbox navigation (showPrev/showNext) has context for sharing
                 currentAlbumName = '__root__'; 
-                // Lightbox will open for current photos.
                 photoThumbnailDiv.addEventListener('click', () => {
-                    openLightbox(index, photos); // Pass photos directly
+                    openLightbox(index, photos); 
                 });
 
                 albumListDiv.appendChild(photoThumbnailDiv);
             });
-            // Update the main header title if needed for flat gallery
             const headerTitle = document.querySelector('.header-title');
             if (headerTitle) headerTitle.textContent = "My Photo Gallery";
 
