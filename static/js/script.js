@@ -3,7 +3,7 @@
 // Global variables for lightbox navigation
 let currentAlbumPhotos = []; // Stores the list of photos for the current album
 let currentPhotoIndex = 0; // Stores the index of the currently displayed photo
-let currentAlbumName = ''; // Stores the name of the currently viewed album (will be '.' or 'subfolder/...')
+let currentAlbumName = ''; // Stores the name of the currently viewed album
 
 // Dynamically determine the base URL prefix from window.location.pathname
 function getBaseUrlPrefix() {
@@ -31,9 +31,9 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (pathname.startsWith(albumRootPath)) {
         const albumPathEncoded = pathname.substring(albumRootPath.length);
         
-        // NEW: currentAlbumName in JS will be '__root__' for the root album, or the decoded path for others.
+        // currentAlbumName in JS will be '__root__' for the root album, or the decoded path for others.
         // This is the identifier used in API calls.
-        currentAlbumName = albumPathEncoded; // Keep it as __root__ or the encoded path
+        currentAlbumName = albumPathEncoded; 
         
         // Update display title based on this identifier
         if (albumPathEncoded === '__root__') {
@@ -178,7 +178,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentAlbumPhotos.length > 0 && currentAlbumName) {
             const photo = currentAlbumPhotos[currentPhotoIndex];
             // currentAlbumName in JS is already '__root__' or the encoded path.
-            const shareUrl = `${window.location.origin}${BASE_URL_PREFIX}/album/${currentAlbumName}?image=${encodeURIComponent(photo.original_filename)}`;
+            const albumNameForUrl = currentAlbumName; // Use currentAlbumName directly, it's already __root__ or encoded path
+            const shareUrl = `${window.location.origin}${BASE_URL_PREFIX}/album/${albumNameForUrl}?image=${encodeURIComponent(photo.original_filename)}`;
 
             const tempInput = document.createElement('input');
             tempInput.value = shareUrl;
@@ -281,8 +282,16 @@ async function fetchPhotos(albumName) { // albumName is now '__root__' or a deco
     photoGridDiv.innerHTML = 'Loading photos...';
 
     try {
-        // Pass albumName directly to API endpoint, it will be '__root__' or the path
-        const response = await fetch(`${BASE_URL_PREFIX}/api/album/${albumName}/photos`);
+        let apiUrl;
+        if (albumName === '__root__') {
+            // For the root album, call /api/album/__root__ (without /photos suffix)
+            apiUrl = `${BASE_URL_PREFIX}/api/album/__root__`;
+        } else {
+            // For other albums, call /api/album/<albumName>/photos
+            apiUrl = `${BASE_URL_PREFIX}/api/album/${albumName}/photos`;
+        }
+
+        const response = await fetch(apiUrl);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
