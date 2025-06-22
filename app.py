@@ -75,7 +75,7 @@ def get_or_create_thumbnail(image_path: Path, thumbnail_path: Path, size: tuple)
     except Exception as e:
         print(f"Error generating thumbnail for {image_path}: {e}")
 
-# NEW: Function to scan and generate all missing thumbnails at startup
+# Function to scan and generate all missing thumbnails at startup
 def scan_and_generate_all_thumbnails():
     """
     Scans the PHOTOS_DIR for all images and generates missing thumbnails.
@@ -205,32 +205,28 @@ def api_albums():
     return jsonify(albums_list)
 
 
-@gallery_bp.route('/api/album/<path:album_name>')
-def api_album_photos(album_name):
+# NEW: Helper function to get photo data for a given filesystem album name ('.' for root).
+def _get_album_photos_data(album_name_key_fs):
     """
-    Returns a JSON list of photos for a specific album by scanning the directory.
-    This is now done on demand for each API request.
+    Helper function to get photo data for a given filesystem album name ('.' for root).
     """
-    print(f"\n--- API photos requested for album: {album_name} (RUNTIME) ---")
+    print(f"\n--- API photos requested for album: {album_name_key_fs} (RUNTIME) ---")
     print(f"Request URL: {request.url}")
     print(f"Request base_url: {request.base_url}")
     print(f"Request script_root: {request.script_root}")
     print(f"Request url_root: {request.url_root}")
+    print(f"DEBUG: Filesystem album key: '{album_name_key_fs}'")
     
     album_photos_list = []
     photos_root = app_config['PHOTOS_DIR']
     thumbnails_root = app_config['THUMBNAILS_DIR']
     thumbnail_size = app_config['THUMBNAIL_SIZE']
 
-    # NEW: Map '__root__' back to '.' for file system access
-    album_name_fs = '.' if album_name == '__root__' else album_name
-
-    # Resolve the full path to the specific album directory on disk
-    album_dir_path = photos_root / album_name_fs
-    album_thumbnail_dir = thumbnails_root / album_name_fs
+    album_dir_path = photos_root / album_name_key_fs
+    album_thumbnail_dir = thumbnails_root / album_name_key_fs
 
     if not album_dir_path.is_dir():
-        print(f"API photos for album '{album_name}': Album directory not found or not a directory: {album_dir_path}")
+        print(f"API photos for album '{album_name_key_fs}': Album directory not found or not a directory: {album_dir_path}")
         return jsonify({"error": "Album not found"}), 404
 
     try:
@@ -239,11 +235,11 @@ def api_album_photos(album_name):
             if photo_path.is_file() and is_image_file(photo_filename):
                 thumbnail_path = album_thumbnail_dir / photo_filename
 
-                get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size) # On-demand thumbnail creation
+                get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
 
                 # Construct URLs (absolute using _external=True)
-                # url_for needs filename to be relative to the PHOTOS_DIR/THUMBNAILS_DIR root
-                serve_filename_for_url = photo_filename if album_name_fs == '.' else f"{album_name_fs}/{photo_filename}"
+                # filename for serve_photo/thumbnail should be relative to PHOTOS_DIR/THUMBNAILS_DIR
+                serve_filename_for_url = photo_filename if album_name_key_fs == '.' else f"{album_name_key_fs}/{photo_filename}"
                 original_url = url_for('gallery.serve_photo', filename=serve_filename_for_url, _external=True)
                 thumb_url = url_for('gallery.serve_thumbnail', filename=serve_filename_for_url, _external=True)
                 print(f"  Generated URL for {photo_filename} thumbnail: {thumb_url}")
@@ -254,13 +250,25 @@ def api_album_photos(album_name):
                     "thumbnail_url": thumb_url
                 })
         album_photos_list.sort(key=lambda x: x['original_filename'].lower())
-        print(f"API photos for album '{album_name}': Found {len(album_photos_list)} photos.")
+        print(f"API photos for album '{album_name_key_fs}': Found {len(album_photos_list)} photos.")
         return jsonify(album_photos_list)
     except Exception as e:
-        print(f"Error listing photos in album {album_name}: {e}")
+        print(f"Error listing photos in album {album_name_key_fs}: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": "Error processing album photos"}), 500
+
+
+# NEW: Route specifically for the root album (photos directly in /photos/)
+@gallery_bp.route('/api/album/__root__')
+def api_album_root_photos():
+    return _get_album_photos_data('.') # Call helper with '.' for filesystem root
+
+
+# Existing route for nested albums and general album names
+@gallery_bp.route('/api/album/<path:album_name>/photos') # Original path, but now calls helper
+def api_album_nested_photos(album_name):
+    return _get_album_photos_data(album_name) # Call helper with actual album name
 
 
 @gallery_bp.route('/photos/<path:filename>')
