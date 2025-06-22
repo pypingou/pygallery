@@ -111,28 +111,32 @@ document.addEventListener('DOMContentLoaded', () => {
         currentPhotoIndex = index;
         currentAlbumPhotos = photosArray;
 
-        updateLightboxImage();
+        // NEW: Set display to flex immediately, then update image src
+        lightbox.style.display = 'flex'; 
+        updateLightboxImage(); // Update image source FIRST
 
-        lightbox.style.display = 'flex';
-        setTimeout(() => {
+        // Add 'active' class after source is set to trigger transition
+        // No setTimeout needed, just allow next tick for reflow
+        requestAnimationFrame(() => {
             lightbox.classList.add('active');
-        }, 10);
+        });
     };
 
     window.closeLightbox = () => {
         lightbox.classList.remove('active');
+        // Wait for animation to finish before hiding display
         setTimeout(() => {
             lightbox.style.display = 'none';
-            lightboxImg.src = '';
-            currentAlbumPhotos = [];
-            currentPhotoIndex = 0;
-            currentAlbumName = '';
-        }, 300);
+            lightboxImg.src = ''; // Clear image src AFTER hiding
+            // No need to reset global vars here, they're handled on openLightbox or page load
+        }, 300); // Match CSS transition duration
     };
 
     function updateLightboxImage() {
+        console.log("updateLightboxImage called. Index:", currentPhotoIndex);
         if (currentAlbumPhotos.length > 0 && currentPhotoIndex >= 0 && currentPhotoIndex < currentAlbumPhotos.length) {
             const photo = currentAlbumPhotos[currentPhotoIndex];
+            console.log("Setting lightbox src to:", photo.original_url);
             lightboxImg.src = photo.original_url;
             lightboxImg.alt = photo.original_filename;
 
@@ -142,6 +146,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (downloadBtn) {
                 downloadBtn.setAttribute('download', photo.original_filename);
             }
+        } else {
+            console.warn("updateLightboxImage: No photos data or invalid index.");
         }
     }
 
@@ -177,8 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function copyShareLink() {
         if (currentAlbumPhotos.length > 0 && currentAlbumName) {
             const photo = currentAlbumPhotos[currentPhotoIndex];
-            // currentAlbumName in JS is already '__root__' or the encoded path.
-            const albumNameForUrl = currentAlbumName; // Use currentAlbumName directly, it's already __root__ or encoded path
+            const albumNameForUrl = currentAlbumName; 
             const shareUrl = `${window.location.origin}${BASE_URL_PREFIX}/album/${albumNameForUrl}?image=${encodeURIComponent(photo.original_filename)}`;
 
             const tempInput = document.createElement('input');
@@ -206,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function initializeAlbumPage() {
-        const photos = await fetchPhotos(currentAlbumName); // Pass currentAlbumName (which is __root__ or path)
+        const photos = await fetchPhotos(currentAlbumName);
         if (photos.length > 0) {
             const imageUrlParam = getUrlParameter('image');
             if (imageUrlParam) {
@@ -241,7 +246,6 @@ async function fetchAlbums() {
 
         albums.forEach(album => {
             const albumCard = document.createElement('a');
-            // album.name from API is already '__root__' or the normal path
             albumCard.href = `${BASE_URL_PREFIX}/album/${album.name}`;
             albumCard.classList.add('album-card');
 
@@ -259,7 +263,7 @@ async function fetchAlbums() {
             const albumTitle = document.createElement('h2');
             albumTitle.classList.add('album-card-title');
             albumTitle.textContent = album.display_name;
-            albumTitle.title = album.name; // Keep actual album name (e.g., '.' or 'folder/sub') in tooltip
+            albumTitle.title = album.name;
 
             const photoCount = document.createElement('p');
             photoCount.classList.add('album-card-count');
@@ -284,10 +288,8 @@ async function fetchPhotos(albumName) { // albumName is now '__root__' or a deco
     try {
         let apiUrl;
         if (albumName === '__root__') {
-            // For the root album, call /api/album/__root__ (without /photos suffix)
             apiUrl = `${BASE_URL_PREFIX}/api/album/__root__`;
         } else {
-            // For other albums, call /api/album/<albumName>/photos
             apiUrl = `${BASE_URL_PREFIX}/api/album/${albumName}/photos`;
         }
 
