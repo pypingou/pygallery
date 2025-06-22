@@ -177,8 +177,11 @@ def api_albums():
                     cover_thumbnail_url = url_for('gallery.serve_thumbnail', filename=serve_filename_for_url, _external=True)
                     print(f"  Generated URL for {album_name_key} cover: {cover_thumbnail_url}")
 
+                    # NEW: Map '.' to '__root__' for external facing album name
+                    album_name_for_url = '__root__' if album_name_key == '.' else album_name_key
+
                     found_albums_data[album_name_key] = {
-                        "name": album_name_key,
+                        "name": album_name_for_url, # Use '__root__' for URL and client-side logic
                         "display_name": album_name_key if album_name_key != '.' else 'Root Gallery',
                         "cover_thumbnail_url": cover_thumbnail_url,
                         "photo_count": len(current_dir_images)
@@ -202,7 +205,7 @@ def api_albums():
     return jsonify(albums_list)
 
 
-@gallery_bp.route('/api/album/<path:album_name>/photos')
+@gallery_bp.route('/api/album/<path:album_name>')
 def api_album_photos(album_name):
     """
     Returns a JSON list of photos for a specific album by scanning the directory.
@@ -219,10 +222,12 @@ def api_album_photos(album_name):
     thumbnails_root = app_config['THUMBNAILS_DIR']
     thumbnail_size = app_config['THUMBNAIL_SIZE']
 
+    # NEW: Map '__root__' back to '.' for file system access
+    album_name_fs = '.' if album_name == '__root__' else album_name
+
     # Resolve the full path to the specific album directory on disk
-    # This correctly handles album_name='.'
-    album_dir_path = photos_root / album_name
-    album_thumbnail_dir = thumbnails_root / album_name
+    album_dir_path = photos_root / album_name_fs
+    album_thumbnail_dir = thumbnails_root / album_name_fs
 
     if not album_dir_path.is_dir():
         print(f"API photos for album '{album_name}': Album directory not found or not a directory: {album_dir_path}")
@@ -238,7 +243,7 @@ def api_album_photos(album_name):
 
                 # Construct URLs (absolute using _external=True)
                 # url_for needs filename to be relative to the PHOTOS_DIR/THUMBNAILS_DIR root
-                serve_filename_for_url = photo_filename if album_name == '.' else f"{album_name}/{photo_filename}"
+                serve_filename_for_url = photo_filename if album_name_fs == '.' else f"{album_name_fs}/{photo_filename}"
                 original_url = url_for('gallery.serve_photo', filename=serve_filename_for_url, _external=True)
                 thumb_url = url_for('gallery.serve_thumbnail', filename=serve_filename_for_url, _external=True)
                 print(f"  Generated URL for {photo_filename} thumbnail: {thumb_url}")

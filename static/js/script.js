@@ -35,12 +35,19 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchAlbums();
     } else if (pathname.startsWith(albumRootPath)) {
         // Example: /gallery/album/Family/Vacation/Paris -> albumPathEncoded = Family/Vacation/Paris
+        // Example: /gallery/album/__root__ -> albumPathEncoded = __root__
         const albumPathEncoded = pathname.substring(albumRootPath.length);
-        const albumName = decodeURIComponent(albumPathEncoded); // Decode it once
-        currentAlbumName = albumName; // Store globally
+        
+        // NEW: Handle the special '__root__' identifier for the root gallery
+        if (albumPathEncoded === '__root__') {
+            currentAlbumName = '.'; // Internally, it's still '.' for the backend
+            document.getElementById('album-title').textContent = 'Album: Root Gallery';
+        } else {
+            currentAlbumName = decodeURIComponent(albumPathEncoded); // Decode other album names
+            document.getElementById('album-title').textContent = `Album: ${currentAlbumName.replace(/\//g, ' / ')}`;
+        }
         
         if (currentAlbumName) {
-            document.getElementById('album-title').textContent = `Album: ${currentAlbumName.replace(/\//g, ' / ')}`;
             initializeAlbumPage(); // This will call fetchPhotos and then handle the image parameter
         }
     }
@@ -176,8 +183,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentAlbumPhotos.length > 0 && currentAlbumName) {
             const photo = currentAlbumPhotos[currentPhotoIndex];
             // Construct the shareable URL using the full current window location origin + derived prefix
-            // window.location.pathname already includes the BASE_URL_PREFIX if it exists.
-            const shareUrl = `${window.location.origin}${window.location.pathname.split('?')[0]}?image=${encodeURIComponent(photo.original_filename)}`;
+            // Map '.' back to '__root__' for URL generation
+            const albumNameForUrl = currentAlbumName === '.' ? '__root__' : encodeURIComponent(currentAlbumName);
+            const shareUrl = `${window.location.origin}${BASE_URL_PREFIX}/album/${albumNameForUrl}?image=${encodeURIComponent(photo.original_filename)}`;
 
             const tempInput = document.createElement('input');
             tempInput.value = shareUrl;
@@ -240,8 +248,9 @@ async function fetchAlbums() {
 
         albums.forEach(album => {
             const albumCard = document.createElement('a');
-            // Use BASE_URL_PREFIX for album links
-            albumCard.href = `${BASE_URL_PREFIX}/album/${album.name}`;
+            // NEW: Map album.name (which could be '.') to '__root__' for URL display
+            const albumNameForUrl = album.name === '.' ? '__root__' : album.name;
+            albumCard.href = `${BASE_URL_PREFIX}/album/${albumNameForUrl}`;
             albumCard.classList.add('album-card');
 
             const albumImg = document.createElement('img');
@@ -259,7 +268,7 @@ async function fetchAlbums() {
             const albumTitle = document.createElement('h2');
             albumTitle.classList.add('album-card-title');
             albumTitle.textContent = album.display_name;
-            albumTitle.title = album.name;
+            albumTitle.title = album.name; // Keep actual album name (e.g., '.') in tooltip for debug
 
             const photoCount = document.createElement('p');
             photoCount.classList.add('album-card-count');
