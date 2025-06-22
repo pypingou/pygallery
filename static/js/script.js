@@ -50,7 +50,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Lightbox functionality
     const lightbox = document.getElementById('lightbox');
     const lightboxImg = document.getElementById('lightbox-img');
-    // NEW: Get references to buttons only if they exist
     const closeBtn = document.querySelector('.close-btn');
     const prevBtn = document.getElementById('prev-photo-btn');
     const nextBtn = document.getElementById('next-photo-btn');
@@ -59,7 +58,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const messageBox = document.getElementById('message-box');
 
     // Attach event listeners only if elements are found
-    // This makes the script robust against pages where the lightbox isn't present (e.g., if you had a different page layout)
     if (closeBtn) {
         closeBtn.addEventListener('click', (event) => {
             event.stopPropagation();
@@ -102,6 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Existing: Keyboard navigation for lightbox
     document.addEventListener('keydown', (event) => {
         if (lightbox && lightbox.classList.contains('active')) {
             if (event.key === 'ArrowLeft') {
@@ -114,9 +113,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // NEW: Swipe navigation for lightbox (touch events)
+    let touchStartX = 0;
+    const swipeThreshold = 50; // Minimum pixels to register a swipe
+
+    if (lightboxImg) {
+        lightboxImg.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            // console.log("Touch started at:", touchStartX); // Debugging
+        });
+
+        lightboxImg.addEventListener('touchend', (e) => {
+            const touchEndX = e.changedTouches[0].clientX;
+            const deltaX = touchEndX - touchStartX;
+            // console.log("Touch ended at:", touchEndX, "DeltaX:", deltaX); // Debugging
+
+            if (deltaX > swipeThreshold) { // Swiped right
+                showPrevPhoto();
+                // console.log("Swipe Right - Prev Photo"); // Debugging
+            } else if (deltaX < -swipeThreshold) { // Swiped left
+                showNextPhoto();
+                // console.log("Swipe Left - Next Photo"); // Debugging
+            }
+        });
+        // Prevent default touchmove to avoid scrolling the background when swiping on image
+        lightboxImg.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+        }, { passive: false });
+    }
+
+
     // openLightbox function - now guarantees elements exist as it's the entry point to lightbox interaction
     window.openLightbox = (index, photosArray) => {
-        // Essential check: if lightbox or its image element is missing, log error and exit.
         if (!lightbox || !lightboxImg) {
             console.error("Lightbox elements not found. Cannot open lightbox.");
             return;
@@ -127,7 +155,6 @@ document.addEventListener('DOMContentLoaded', () => {
         lightbox.style.display = 'flex'; 
         updateLightboxImage(); 
 
-        // Request animation frame for smooth transition
         requestAnimationFrame(() => {
             lightbox.classList.add('active');
         });
@@ -148,7 +175,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Helper function that updates the displayed image and navigation buttons
     function updateLightboxImage() {
         console.log("updateLightboxImage called. Index:", currentPhotoIndex);
-        // Ensure all required elements are available before trying to use them
         if (!lightboxImg || !prevBtn || !nextBtn || !downloadBtn) {
              console.warn("updateLightboxImage: Required lightbox elements (img, nav, download) not found. Skipping update.");
              return;
