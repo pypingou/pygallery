@@ -110,6 +110,52 @@ def scan_and_generate_all_thumbnails():
     print("--- Initial thumbnail generation scan complete ---")
 
 
+# NEW: Helper to list photos for a given filesystem path.
+def _get_photos_for_fs_path(fs_path: Path, album_name_for_url: str):
+    """
+    Helper to list photos for a given filesystem path and construct their URLs.
+    album_name_for_url is the name used in Flask URL routing (e.g., '__root__' or 'folder/sub').
+    """
+    photos_list = []
+    thumbnail_size = app_config['THUMBNAIL_SIZE']
+    photos_root = app_config['PHOTOS_DIR'] # Needed for relative_to in url_for filename
+
+    if not fs_path.is_dir():
+        print(f"DEBUG: _get_photos_for_fs_path: Filesystem path not found or not a directory: {fs_path}")
+        return []
+
+    try:
+        for photo_filename in os.listdir(fs_path):
+            photo_path = fs_path / photo_filename
+            if photo_path.is_file() and is_image_file(photo_filename):
+                # Construct thumbnail path
+                relative_to_photos_root = photo_path.relative_to(photos_root)
+                thumbnail_path = app_config['THUMBNAILS_DIR'] / relative_to_photos_root
+                
+                get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
+
+                # Determine the filename argument for url_for (relative to PHOTOS_DIR/THUMBNAILS_DIR)
+                # This will be the full path e.g. 'image.jpg' or 'USA/image.jpg'
+                filename_for_url_arg = str(relative_to_photos_root).replace(os.sep, '/')
+
+                original_url = url_for('gallery.serve_photo', filename=filename_for_url_arg, _external=True)
+                thumb_url = url_for('gallery.serve_thumbnail', filename=filename_for_url_arg, _external=True)
+
+                photos_list.append({
+                    "original_filename": photo_filename,
+                    "original_url": original_url,
+                    "thumbnail_url": thumb_url
+                })
+        photos_list.sort(key=lambda x: x['original_filename'].lower())
+        print(f"DEBUG: _get_photos_for_fs_path: Found {len(photos_list)} photos in {fs_path}")
+        return photos_list
+    except Exception as e:
+        print(f"Error in _get_photos_for_fs_path for {fs_path}: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+
 # --- API Endpoints ---
 
 @gallery_bp.route('/')
@@ -125,150 +171,112 @@ def album_page(album_name):
 @gallery_bp.route('/api/albums')
 def api_albums():
     """
-    Returns a JSON list of all albums by scanning the PHOTOS_DIR on demand.
-    Thumbnails are assumed to be mostly pre-generated.
+    Returns a JSON response indicating gallery mode (flat or nested) and album/photo data.
     """
     print(f"\n--- API albums requested (RUNTIME) ---")
     print(f"Request URL: {request.url}")
-    print(f"Request base_url: {request.base_url}")
-    print(f"Request url_root: {request.url_root}")
-    print(f"Request script_root: {request.script_root}") # This should be the prefix or '/'
-    print(f"request.environ['SERVER_NAME']: {request.environ.get('SERVER_NAME')}")
-    print(f"request.environ['SERVER_PORT']: {request.environ.get('SERVER_PORT')}")
-    print(f"request.environ['wsgi.url_scheme']: {request.environ.get('wsgi.url_scheme')}")
-    print(f"os.environ SCRIPT_NAME (from Docker/Quadlet): {os.environ.get('SCRIPT_NAME')}") # What Gunicorn gets
+    print(f"Request script_root: {request.script_root}")
     print(f"PHOTOS_DIR: {app_config['PHOTOS_DIR']}")
     
     albums_list = []
     photos_root = app_config['PHOTOS_DIR']
-    thumbnail_size = app_config['THUMBNAIL_SIZE']
+    
+    # NEW: Read GALLERY_MODE from environment variable
+    gallery_mode = os.environ.get('GALLERY_MODE', 'ALBUM_DISPLAY') # Default to album display
 
     if not photos_root.is_dir():
-        print(f"Error: PHOTOS_DIR '{photos_root}' does not exist or is not a directory. Returning empty albums.")
-        return jsonify([])
+        print(f"Error: PHOTOS_DIR '{photos_root}' does not exist or is not a directory. Returning empty response.")
+        return jsonify({"mode": "nested_gallery", "albums": []})
 
-    found_albums_data = {} # {album_path_str: {"cover_url": "", "photo_count": 0}}
+    # Determine if it's a flat gallery (only root photos, no sub-albums with photos)
+    is_flat_gallery = False
+    root_photos_count = 0
+    nested_albums_count = 0
 
-    try:
+    # Walk through the directories to count photos and albums
+    # Use topdown=True to allow modification of dirnames if needed, though not doing so here.
+    for dirpath, dirnames, filenames in os.walk(photos_root, topdown=True):
+        current_dir_images = [f for f in filenames if is_image_file(f)]
+        
+        if Path(dirpath) == photos_root: # Root directory
+            root_photos_count = len(current_dir_images)
+            # print(f"DEBUG: Root photos count: {root_photos_count}") # For debugging
+        elif current_dir_images: # Any subdirectory with images
+            nested_albums_count += 1
+            # print(f"DEBUG: Found images in subdirectory: {dirpath}") # For debugging
+    
+    # Define flat gallery criteria: photos in root, and no other image-containing subdirectories
+    if root_photos_count > 0 and nested_albums_count == 0:
+        is_flat_gallery = True
+
+    # --- Conditional Response based on GALLERY_MODE ---
+    if gallery_mode == 'FLAT_ROOT_DISPLAY' and is_flat_gallery:
+        print(f"Detected FLAT_ROOT_DISPLAY mode. Serving root photos directly.")
+        root_photos_data = _get_photos_for_fs_path(photos_root, '__root__') # Get data for root photos
+        return jsonify({"mode": "flat_gallery", "photos": root_photos_data})
+    else:
+        print(f"Detected NESTED_GALLERY mode or FLAT_ROOT_DISPLAY disabled. Serving album list.")
+        # Rebuild albums_list logic for nested/default display
+        found_albums_data = {}
         for dirpath, dirnames, filenames in os.walk(photos_root):
             current_dir_images = [f for f in filenames if is_image_file(f)]
             
-            if current_dir_images: # Only consider directories that contain images as albums
+            if current_dir_images:
                 try:
                     relative_path = Path(dirpath).relative_to(photos_root)
-                    album_name_key = str(relative_path).replace(os.sep, '/') # Use '/' for consistent keys
+                    album_name_key = str(relative_path).replace(os.sep, '/')
 
-                    # Sort images to find the first one for cover if needed
-                    current_dir_images.sort(key=lambda x: x.lower())
                     first_image_filename = current_dir_images[0]
-                    
-                    # Ensure thumbnail for cover image exists (on-demand generation)
                     album_thumbnail_dir = app_config['THUMBNAILS_DIR'] / relative_path
                     cover_image_path = Path(dirpath) / first_image_filename
                     cover_thumbnail_path = album_thumbnail_dir / first_image_filename
+                    get_or_create_thumbnail(cover_image_path, cover_thumbnail_path, app_config['THUMBNAIL_SIZE'])
 
-                    get_or_create_thumbnail(cover_image_path, cover_thumbnail_path, thumbnail_size)
-
-                    # Construct the internal URL for the cover thumbnail
-                    # Use _external=True to generate absolute URLs based on the current request context
                     # Correct filename construction for url_for to handle root album
                     serve_filename_for_url = first_image_filename if album_name_key == '.' else f"{album_name_key}/{first_image_filename}"
-                    
                     cover_thumbnail_url = url_for('gallery.serve_thumbnail', filename=serve_filename_for_url, _external=True)
-                    print(f"  Generated URL for {album_name_key} cover: {cover_thumbnail_url}")
-
-                    # NEW: Map '.' to '__root__' for external facing album name
+                    
+                    # Map '.' to '__root__' for external facing album name
                     album_name_for_url = '__root__' if album_name_key == '.' else album_name_key
 
                     found_albums_data[album_name_key] = {
-                        "name": album_name_for_url, # Use '__root__' for URL and client-side logic
+                        "name": album_name_for_url,
                         "display_name": album_name_key if album_name_key != '.' else 'Root Gallery',
                         "cover_thumbnail_url": cover_thumbnail_url,
                         "photo_count": len(current_dir_images)
                     }
-                    print(f"  Found album: {album_name_key} with {len(current_dir_images)} photos.")
                 except Exception as e:
                     print(f"Error processing album directory {dirpath}: {e}")
                     import traceback
                     traceback.print_exc()
-        print(f"Finished os.walk for {photos_root}")
-    except Exception as e:
-        print(f"Unhandled error during os.walk on {photos_root}: {e}")
-        import traceback
-        traceback.print_exc()
-
-    # Convert found_albums_data to a list and sort
-    albums_list = list(found_albums_data.values())
-    albums_list.sort(key=lambda x: x['display_name'].lower())
-    
-    print(f"API albums response: Found {len(albums_list)} albums.")
-    return jsonify(albums_list)
+        
+        albums_list = list(found_albums_data.values())
+        albums_list.sort(key=lambda x: x['display_name'].lower())
+        
+        print(f"API albums response: Found {len(albums_list)} albums in nested mode.")
+        return jsonify({"mode": "nested_gallery", "albums": albums_list})
 
 
-# NEW: Helper function to get photo data for a given filesystem album name ('.' for root).
-def _get_album_photos_data(album_name_key_fs):
+# Main API endpoint for nested albums (e.g., /api/album/Family/Vacation/Paris/photos)
+@gallery_bp.route('/api/album/<path:album_name>/photos')
+def api_album_photos_nested(album_name):
     """
-    Helper function to get photo data for a given filesystem album name ('.' for root).
+    Returns photos for nested albums. This endpoint explicitly expects '/photos' suffix.
     """
-    print(f"\n--- API photos requested for album: {album_name_key_fs} (RUNTIME) ---")
-    print(f"Request URL: {request.url}")
-    print(f"Request base_url: {request.base_url}")
-    print(f"Request script_root: {request.script_root}")
-    print(f"Request url_root: {request.url_root}")
-    print(f"DEBUG: Filesystem album key: '{album_name_key_fs}'")
-    
-    album_photos_list = []
-    photos_root = app_config['PHOTOS_DIR']
-    thumbnails_root = app_config['THUMBNAILS_DIR']
-    thumbnail_size = app_config['THUMBNAIL_SIZE']
-
-    album_dir_path = photos_root / album_name_key_fs
-    album_thumbnail_dir = thumbnails_root / album_name_key_fs
-
-    if not album_dir_path.is_dir():
-        print(f"API photos for album '{album_name_key_fs}': Album directory not found or not a directory: {album_dir_path}")
-        return jsonify({"error": "Album not found"}), 404
-
-    try:
-        for photo_filename in os.listdir(album_dir_path):
-            photo_path = album_dir_path / photo_filename
-            if photo_path.is_file() and is_image_file(photo_filename):
-                thumbnail_path = album_thumbnail_dir / photo_filename
-
-                get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
-
-                # Construct URLs (absolute using _external=True)
-                # filename for serve_photo/thumbnail should be relative to PHOTOS_DIR/THUMBNAILS_DIR
-                serve_filename_for_url = photo_filename if album_name_key_fs == '.' else f"{album_name_key_fs}/{photo_filename}"
-                original_url = url_for('gallery.serve_photo', filename=serve_filename_for_url, _external=True)
-                thumb_url = url_for('gallery.serve_thumbnail', filename=serve_filename_for_url, _external=True)
-                print(f"  Generated URL for {photo_filename} thumbnail: {thumb_url}")
-
-                album_photos_list.append({
-                    "original_filename": photo_filename,
-                    "original_url": original_url,
-                    "thumbnail_url": thumb_url
-                })
-        album_photos_list.sort(key=lambda x: x['original_filename'].lower())
-        print(f"API photos for album '{album_name_key_fs}': Found {len(album_photos_list)} photos.")
-        return jsonify(album_photos_list)
-    except Exception as e:
-        print(f"Error listing photos in album {album_name_key_fs}: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": "Error processing album photos"}), 500
+    print(f"--- API photos requested for album: {album_name} (RUNTIME - Nested) ---")
+    # Call helper with the actual album_name (e.g., 'Family/Vacation/Paris')
+    return _get_photos_for_fs_path(app_config['PHOTOS_DIR'] / album_name, album_name)
 
 
-# NEW: Route specifically for the root album (photos directly in /photos/)
+# NEW: Specific API endpoint for the root album (e.g., /api/album/__root__)
 @gallery_bp.route('/api/album/__root__')
-def api_album_root_photos():
-    return _get_album_photos_data('.') # Call helper with '.' for filesystem root
-
-
-# Existing route for nested albums and general album names
-@gallery_bp.route('/api/album/<path:album_name>/photos') # Original path, but now calls helper
-def api_album_nested_photos(album_name):
-    return _get_album_photos_data(album_name) # Call helper with actual album name
+def api_album_photos_root():
+    """
+    Returns photos for the special '__root__' album.
+    This endpoint handles requests without the '/photos' suffix for the root.
+    """
+    print(f"--- API photos requested for album: __root__ (RUNTIME - Root) ---")
+    return _get_photos_for_fs_path(app_config['PHOTOS_DIR'], '__root__') # Call helper with PHOTOS_DIR root and special name
 
 
 @gallery_bp.route('/photos/<path:filename>')

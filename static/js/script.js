@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const albumRootPath = BASE_URL_PREFIX + '/album/'; // e.g., /gallery/album/
 
     if (pathname === galleryRootPath || (BASE_URL_PREFIX === '' && pathname === '/')) {
-        fetchAlbums();
+        fetchAlbums(); // This now fetches mode and albums/photos
     } else if (pathname.startsWith(albumRootPath)) {
         const albumPathEncoded = pathname.substring(albumRootPath.length);
         
@@ -111,12 +111,9 @@ document.addEventListener('DOMContentLoaded', () => {
         currentPhotoIndex = index;
         currentAlbumPhotos = photosArray;
 
-        // NEW: Set display to flex immediately, then update image src
         lightbox.style.display = 'flex'; 
-        updateLightboxImage(); // Update image source FIRST
+        updateLightboxImage(); 
 
-        // Add 'active' class after source is set to trigger transition
-        // No setTimeout needed, just allow next tick for reflow
         requestAnimationFrame(() => {
             lightbox.classList.add('active');
         });
@@ -124,12 +121,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.closeLightbox = () => {
         lightbox.classList.remove('active');
-        // Wait for animation to finish before hiding display
         setTimeout(() => {
             lightbox.style.display = 'none';
-            lightboxImg.src = ''; // Clear image src AFTER hiding
-            // No need to reset global vars here, they're handled on openLightbox or page load
-        }, 300); // Match CSS transition duration
+            lightboxImg.src = ''; 
+        }, 300);
     };
 
     function updateLightboxImage() {
@@ -228,56 +223,100 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function fetchAlbums() {
     const albumListDiv = document.getElementById('album-list');
-    albumListDiv.innerHTML = 'Loading albums...';
+    albumListDiv.innerHTML = 'Loading content...'; // More generic message
 
     try {
         const response = await fetch(`${BASE_URL_PREFIX}/api/albums`);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        const albums = await response.json();
+        const data = await response.json(); // Data now contains mode and either albums or photos
 
-        albumListDiv.innerHTML = '';
+        albumListDiv.innerHTML = ''; // Clear loading message
 
-        if (albums.length === 0) {
-            albumListDiv.innerHTML = '<p style="text-align: center; width: 100%;">No albums found. Please add photos to your "photos" directory.</p>';
-            return;
+        if (data.mode === 'flat_gallery') {
+            console.log("Rendering flat gallery directly on index page.");
+            const photos = data.photos;
+            if (photos.length === 0) {
+                albumListDiv.innerHTML = '<p style="text-align: center; width: 100%;">No photos found in the root directory.</p>';
+                return;
+            }
+            // Hide the back button if it exists on index page (it shouldn't, but for safety)
+            const backNav = document.querySelector('.back-nav');
+            if (backNav) backNav.style.display = 'none';
+
+            // Render photos directly into the albumListDiv
+            photos.forEach((photo, index) => {
+                const photoThumbnailDiv = document.createElement('div');
+                photoThumbnailDiv.classList.add('photo-thumbnail');
+
+                const photoImg = document.createElement('img');
+                photoImg.src = photo.thumbnail_url;
+                photoImg.alt = photo.original_filename;
+                photoImg.onerror = () => {
+                    photoImg.src = `${BASE_URL_PREFIX}/static/placeholder.png`;
+                };
+
+                photoThumbnailDiv.appendChild(photoImg);
+
+                // Set currentAlbumName to '__root__' when rendering flat gallery
+                // This ensures lightbox navigation (showPrev/showNext) has context for sharing
+                currentAlbumName = '__root__'; 
+                // Lightbox will open for current photos.
+                photoThumbnailDiv.addEventListener('click', () => {
+                    openLightbox(index, photos); // Pass photos directly
+                });
+
+                albumListDiv.appendChild(photoThumbnailDiv);
+            });
+            // Update the main header title if needed for flat gallery
+            const headerTitle = document.querySelector('.header-title');
+            if (headerTitle) headerTitle.textContent = "My Photo Gallery";
+
+
+        } else { // mode === 'nested_gallery'
+            console.log("Rendering nested gallery albums on index page.");
+            const albums = data.albums;
+            if (albums.length === 0) {
+                albumListDiv.innerHTML = '<p style="text-align: center; width: 100%;">No albums found. Please add photos to your "photos" directory.</p>';
+                return;
+            }
+
+            albums.forEach(album => {
+                const albumCard = document.createElement('a');
+                albumCard.href = `${BASE_URL_PREFIX}/album/${album.name}`;
+                albumCard.classList.add('album-card');
+
+                const albumImg = document.createElement('img');
+                albumImg.src = album.cover_thumbnail_url;
+                albumImg.alt = `Cover for ${album.display_name}`;
+                albumImg.classList.add('album-card-img');
+                albumImg.onerror = () => {
+                    albumImg.src = `${BASE_URL_PREFIX}/static/placeholder.png`;
+                };
+
+                const albumInfo = document.createElement('div');
+                albumInfo.classList.add('album-card-info');
+
+                const albumTitle = document.createElement('h2');
+                albumTitle.classList.add('album-card-title');
+                albumTitle.textContent = album.display_name;
+                albumTitle.title = album.name;
+
+                const photoCount = document.createElement('p');
+                photoCount.classList.add('album-card-count');
+                photoCount.textContent = `${album.photo_count} photos`;
+
+                albumInfo.appendChild(albumTitle);
+                albumInfo.appendChild(photoCount);
+                albumCard.appendChild(albumImg);
+                albumCard.appendChild(albumInfo);
+                albumListDiv.appendChild(albumCard);
+            });
         }
-
-        albums.forEach(album => {
-            const albumCard = document.createElement('a');
-            albumCard.href = `${BASE_URL_PREFIX}/album/${album.name}`;
-            albumCard.classList.add('album-card');
-
-            const albumImg = document.createElement('img');
-            albumImg.src = album.cover_thumbnail_url;
-            albumImg.alt = `Cover for ${album.display_name}`;
-            albumImg.classList.add('album-card-img');
-            albumImg.onerror = () => {
-                albumImg.src = `${BASE_URL_PREFIX}/static/placeholder.png`;
-            };
-
-            const albumInfo = document.createElement('div');
-            albumInfo.classList.add('album-card-info');
-
-            const albumTitle = document.createElement('h2');
-            albumTitle.classList.add('album-card-title');
-            albumTitle.textContent = album.display_name;
-            albumTitle.title = album.name;
-
-            const photoCount = document.createElement('p');
-            photoCount.classList.add('album-card-count');
-            photoCount.textContent = `${album.photo_count} photos`;
-
-            albumInfo.appendChild(albumTitle);
-            albumInfo.appendChild(photoCount);
-            albumCard.appendChild(albumImg);
-            albumCard.appendChild(albumInfo);
-            albumListDiv.appendChild(albumCard);
-        });
     } catch (error) {
-        console.error('Error fetching albums:', error);
-        albumListDiv.innerHTML = `<p style="text-align: center; width: 100%; color: red;">Failed to load albums: ${error.message}</p>`;
+        console.error('Error fetching gallery content:', error);
+        albumListDiv.innerHTML = `<p style="text-align: center; width: 100%; color: red;">Failed to load gallery content: ${error.message}</p>`;
     }
 }
 
@@ -321,7 +360,7 @@ async function fetchPhotos(albumName) { // albumName is now '__root__' or a deco
             photoThumbnailDiv.appendChild(photoImg);
 
             photoThumbnailDiv.addEventListener('click', () => {
-                openLightbox(index, currentAlbumPhotos);
+                openLightbox(index, photos);
             });
 
             photoGridDiv.appendChild(photoThumbnailDiv);

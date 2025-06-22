@@ -24,14 +24,16 @@ PublishPort=8000:5000
 
 # Connect the container to a user-defined network
 # Replace 'my_gallery_network' with the name you chose when creating it.
-#Network=my_gallery_network
+Network=my_gallery_network
 
 # OPTIONAL: Assign a static IP address within the network's subnet.
 # Choose an IP address that is within the subnet range of 'my_gallery_network'.
 # StaticIP=10.89.0.10 # Uncomment and set a specific IP if desired
 
-# Removed Environment=SCRIPT_NAME here, as SCRIPT_NAME is now set directly in Dockerfile CMD.
-# Removed Environment=BASE_URL_PREFIX here, as it's not needed by app.py's runtime logic.
+# NEW: Set GALLERY_MODE environment variable.
+# Valid values: 'FLAT_ROOT_DISPLAY' (for flat mode) or 'ALBUM_DISPLAY' (for album list mode)
+# If not set, 'ALBUM_DISPLAY' is the default in app.py.
+Environment=GALLERY_MODE=ALBUM_DISPLAY # Set to FLAT_ROOT_DISPLAY for direct root display
 
 [Unit]
 # Description for the systemd service

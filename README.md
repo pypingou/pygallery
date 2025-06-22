@@ -7,12 +7,20 @@ This is a lightweight web application designed to serve as a simple photo galler
 ## Features
 
 * **Folder-based Albums:** Each folder on your disk corresponds to an album in the gallery.
+
 * **Automatic Thumbnail Generation:** Thumbnails are automatically generated for photos if they don't already exist.
+
 * **Responsive Web Interface:** Albums and photos are displayed in a responsive grid layout.
+
 * **Lightbox View:** Click on a photo to see a larger version in a pop-up lightbox.
+
 * **Image Navigation:** Use mouse clicks (on navigation arrows) or keyboard arrow keys (left/right) to browse photos within the lightbox.
+
 * **Image Download:** A button within the lightbox allows easy downloading of the current image.
+
 * **Containerized Deployment:** Ready for deployment as a container image using Podman/Docker, managed with Systemd/Quadlet on Fedora.
+
+* **Configurable Display Mode:** Choose between a traditional album list view or a "flat" display where root-level photos are shown directly on the index page if no subfolders exist.
 
 ---
 
@@ -54,8 +62,11 @@ pygallery/
 ### Prerequisites
 
 * Python 3.x
+
 * `pip` (Python package installer)
+
 * Podman or Docker (for containerized deployment)
+
 * A Fedora server (for Quadlet deployment)
 
 ### 1. Clone the Repository
@@ -76,6 +87,7 @@ pip install -r requirements.txt
 ```
 
 The `requirements.txt` file contains:
+
 ```
 Flask
 Pillow
@@ -95,11 +107,12 @@ PORT = 5000
 ```
 
 * `PHOTOS_DIR`: Path to your original photo albums.
-* `THUMBNAILS_DIR`: Path where generated thumbnails will be stored.
-* `THUMBNAIL_SIZE`: Desired dimensions for thumbnails (width,height).
-* `PORT`: The port Flask will listen on.
 
----
+* `THUMBNAILS_DIR`: Path where generated thumbnails will be stored.
+
+* `THUMBNAIL_SIZE`: Desired dimensions for thumbnails (width,height).
+
+* `PORT`: The port Flask will listen on.
 
 ## Generating Dummy Images (Optional)
 
@@ -107,10 +120,10 @@ For testing purposes, you can use the provided script to generate some placehold
 
 ```bash
 python generate_dummy_images.py
-```
-This will create `photos/VacationPhotos` and `photos/Cityscapes` with sample images.
 
----
+```
+
+This will create `photos/VacationPhotos` and `photos/Cityscapes` with sample images.
 
 ## Running the Application
 
@@ -118,30 +131,37 @@ This will create `photos/VacationPhotos` and `photos/Cityscapes` with sample ima
 
 To run the Flask application directly (for development):
 
-```bash
-python app.py
 ```
-Access the gallery at `http://127.0.0.1:5000/gallery/` (or the port specified in `config.ini`).
+python app.py
+
+```
+
+Access the gallery at `http://127.0.0.1:5000/` (if `SCRIPT_NAME` is `/` in your local environment, or it will be `http://127.0.0.1:5000/gallery/` if you set `SCRIPT_NAME=/gallery` in your shell environment before running).
 
 ### 2. Containerized Deployment (Podman/Docker)
 
 **Build the Image:**
 
-```bash
+```
 # Using Podman
 podman build -t pygallery .
 
 # Using Docker
 docker build -t pygallery .
+
 ```
 
 **Run the Container (for testing, or if not using Quadlet/Apache):**
 
-```bash
+```
 # Replace /path/to/your/actual/photos and /path/to/your/actual/thumbnails
 # with your actual host directories.
 HOST_PHOTOS_DIR="/home/user/my_gallery_photos"
 HOST_THUMBNAILS_DIR="/home/user/my_gallery_thumbnails"
+
+# IMPORTANT: Adjust SCRIPT_NAME to match your desired external path.
+# For example, for http://your_server_ip:8000/gallery/
+SCRIPT_NAME_VALUE="/gallery"
 
 # Using Podman
 podman run -d \
@@ -149,6 +169,7 @@ podman run -d \
   -p 8000:5000 \
   -v "${HOST_PHOTOS_DIR}":/app/photos:Z \
   -v "${HOST_THUMBNAILS_DIR}":/app/thumbnails:Z \
+  --env SCRIPT_NAME="${SCRIPT_NAME_VALUE}" \
   pygallery
 
 # Using Docker
@@ -157,9 +178,12 @@ docker run -d \
   -p 8000:5000 \
   -v "${HOST_PHOTOS_DIR}":/app/photos \
   -v "${HOST_THUMBNAILS_DIR}":/app/thumbnails \
+  --env SCRIPT_NAME="${SCRIPT_NAME_VALUE}" \
   pygallery
+
 ```
-Access the gallery at `http://your_server_ip:8000/gallery/`.
+
+Access the gallery at `http://your_server_ip:8000/<YOUR_SCRIPT_NAME_VALUE>/`.
 
 ### 3. Deployment with Quadlet (Systemd Service on Fedora)
 
@@ -167,100 +191,134 @@ Quadlet allows you to manage your container as a systemd service.
 
 **1. Place the Quadlet File:**
 
-Save the `pygallery-app.container` file to `/etc/containers/systemd/`:
+Save the `photo-gallery.container` file to `/etc/containers/systemd/`:
 
-```ini
-# /etc/containers/systemd/pygallery-app.container
+```
+# /etc/containers/systemd/photo-gallery.container
 [Container]
 ContainerName=pygallery-app
 Image=localhost/pygallery:latest
 Volume=/home/user/my_gallery_photos:/app/photos:Z # **UPDATE THIS PATH**
 Volume=/home/user/my_gallery_thumbnails:/app/thumbnails:Z # **UPDATE THIS PATH**
 PublishPort=8000:5000 # Container port 5000 mapped to host port 8000
-Restart=on-failure
+Network=my_gallery_network # Replace with your network name
+
+# Set environment variables for the container.
+# SCRIPT_NAME: This tells Gunicorn (and thus Flask via ProxyFix) its application mount point.
+# This should match the path your Apache proxy routes to the container.
+# IMPORTANT: Replace <YOUR_BASE_URL_PREFIX_VALUE> (e.g., /gallery, /myphotos)
+Environment=SCRIPT_NAME=/ # Set to your desired subpath, or / for root.
+Environment=GALLERY_MODE=ALBUM_DISPLAY # Set to 'FLAT_ROOT_DISPLAY' for direct root display mode.
 
 [Unit]
 Description=pygallery: My Lightweight Photo Gallery Container
 Wants=network-online.target
 After=network-online.target
+
+[Service]
+Restart=on-failure
+
 ```
-**Remember to replace the volume paths** with your actual host directories.
+
+**Remember to:**
+
+* Replace the `Volume` paths with your actual host directories.
+
+* Set `Environment=SCRIPT_NAME=/` to your desired subpath (e.g., `/gallery`) if deploying there, or `/` for root deployment.
+
+* Set `Environment=GALLERY_MODE=FLAT_ROOT_DISPLAY` if you want the root page to show photos directly when no subfolders exist.
 
 **2. Reload Systemd and Start Service:**
 
-```bash
-sudo systemctl daemon-reload
-sudo systemctl start pygallery-app.service
-sudo systemctl enable pygallery-app.service # To start on boot
 ```
-Access the gallery at `http://your_server_ip:8000/gallery/`.
+sudo systemctl daemon-reload
+sudo systemctl start photo-gallery.service
+sudo systemctl enable photo-gallery.service # To start on boot
 
-### 4. Deploying with Apache Reverse Proxy at `/gallery`
+```
 
-If Apache is already running on port 80, you can use it as a reverse proxy to serve your gallery at `example.com/gallery`.
+Access the gallery at `http://your_server_ip:8000/<YOUR_SCRIPT_NAME_VALUE>/`.
+
+### 4. Deploying with Apache Reverse Proxy at `/gallery` (HTTPS)
+
+If Apache is already running on port 80/443, you can use it as a reverse proxy.
 
 **1. Ensure Container is Running (Internal Port Only):**
 
-Your `pygallery-app.container` file (or `podman run` command) **should not** publish port 80 or 8000 to the host if Apache is handling the public-facing access. It only needs to listen on port 5000 internally. You can remove `PublishPort` from your Quadlet file or bind it to `127.0.0.1` for internal testing: `PublishPort=127.0.0.1:8080:5000`.
+Your Quadlet file (above) should have `PublishPort=8000:5000` or no `PublishPort` if only accessed via Apache.
 
 **2. Apache Configuration (`/etc/httpd/conf.d/gallery.conf`):**
 
 Create or modify an Apache configuration file:
 
-```apacheconf
+```
 # /etc/httpd/conf.d/gallery.conf
-<VirtualHost *:80>
+<VirtualHost *:443> # Listening on HTTPS port 443
     ServerName your_domain_or_server_ip # e.g., example.com
+
+    # SSL/TLS Configuration (adjust paths to your Let's Encrypt certificates)
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/your_domain_or_server_ip/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/your_domain_or_server_ip/privkey.pem
+    # Add any other SSL directives from your existing config here
 
     ProxyPreserveHost On
     ProxyRequests Off
 
-    # Get container's internal IP with: podman inspect pygallery-app | grep -i "IPAddress"
-    # Example IP: 172.17.0.2 (this will vary)
-    ProxyPass /gallery/ http://<container_internal_ip>:5000/gallery/ nocanon
-    ProxyPassReverse /gallery/ http://<container_internal_ip>:5000/gallery/
-
     ErrorLog /var/log/httpd/gallery_error.log
     CustomLog /var/log/httpd/gallery_access.log combined
 
+    # --- Centralized HTTP Basic Authentication and Proxying for the Gallery ---
+    # SCRIPT_NAME in the container should be '/'
+    # The external prefix (e.g., /gallery) is handled by Apache.
+    # IMPORTANT: Replace <EXTERNAL_URL_PREFIX> with your actual external path (e.g., /gallery)
+    #            Replace <container_name> with your container's name (e.g., pygallery-app)
+    <Location /<EXTERNAL_URL_PREFIX>>
+        AuthType Basic
+        AuthName "Restricted Gallery Access"
+        AuthUserFile /etc/httpd/.htpasswd # **UPDATE THIS PATH**
+        Require valid-user
+
+        # Tell backend Flask app about original client request context
+        RequestHeader set X-Forwarded-Proto "https"
+        RequestHeader set X-Forwarded-Ssl "on"
+        RequestHeader set X-Forwarded-Port "443"
+        RequestHeader set X-Forwarded-Host your_domain_or_server_ip # **UPDATE THIS**
+        RequestHeader set X-Forwarded-Prefix "/<EXTERNAL_URL_PREFIX>" # Tells Flask its external mount point
+
+        # Proxy requests to the container's internal root '/'
+        # Flask is configured to run at internal root '/' and uses SCRIPT_NAME for external URL generation.
+        ProxyPass http://<container_name>:5000/ nocanon
+        ProxyPassReverse http://<container_name>:5000/
+        # ProxyPassReverseCookieDomain <container_name> your_domain_or_server_ip # Uncomment if cookies involved
+        # ProxyPassReverseCookiePath / /<EXTERNAL_URL_PREFIX>/ # Uncomment if cookies involved
+
+    </Location>
     <Directory />
         Require all granted
     </Directory>
 </VirtualHost>
-```
-**Remember to replace `<container_internal_ip>`** with the actual internal IP address of your running Podman container.
 
-**3. Adjust SELinux (if necessary):**
-
-```bash
-sudo setsebool -P httpd_can_network_connect 1
 ```
 
-**4. Restart Apache:**
+**Remember to:**
 
-```bash
-sudo systemctl restart httpd
-```
-
-Your gallery should now be accessible at `http://your_domain_or_server_ip/gallery/`.
-
----
+* Replace all placeholders (`<EXTERNAL_URL_PREFIX>`, `your_domain_or_server_ip`, `<container_name>`, and SSL certificate/key paths).
 
 ## Customization
 
-* **Thumbnail Size:** Adjust `THUMBNAIL_SIZE` in `config.ini`.
-* **Styling:** Modify `static/css/style.css` for visual changes.
-* **Flask Routes:** Extend or modify routes in `app.py` for new features.
+* **Gallery Display Mode:** Set `Environment=GALLERY_MODE=FLAT_ROOT_DISPLAY` in your `photo-gallery.container` Quadlet file for direct display of root photos (if no subfolders exist). Use `ALBUM_DISPLAY` (default) for the album list view.
 
----
+* **Thumbnail Size:** Adjust `THUMBNAIL_SIZE` in `config.ini`.
+
+* **Styling:** Modify `static/css/style.css` for visual changes.
+
+* **Flask Routes:** Extend or modify routes in `app.py` for new features.
 
 ## Contributing
 
 Feel free to fork this repository, open issues, or submit pull requests.
 
----
-
 ## License
 
 This project is licensed under the MIT License.
-
