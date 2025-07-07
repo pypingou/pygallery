@@ -2,6 +2,8 @@
 """Main application entry point for pygallery."""
 
 import os
+import logging
+from typing import Callable
 from flask import Flask
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -11,9 +13,19 @@ from routes.views import gallery_bp
 from utils.image_processing import scan_and_generate_all_thumbnails
 
 
-def create_app():
+def create_app() -> Flask:
     """Create and configure the Flask application."""
     app = Flask(__name__)
+    
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler('pygallery.log'),
+            logging.StreamHandler()
+        ]
+    )
     
     # Apply ProxyFix to the Flask application
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_prefix=1, x_proto=1)
@@ -24,7 +36,7 @@ def create_app():
     return app
 
 
-def main():
+def main() -> None:
     """Main application entry point."""
     # Create Flask app
     app = create_app()
@@ -56,7 +68,17 @@ def main():
         scan_and_generate_all_thumbnails()  # This function now just generates thumbnails
 
     print(f"Starting Flask app on {os.environ.get('wsgi.url_scheme', 'http')}://{os.environ.get('SERVER_NAME', 'localhost')}:{os.environ.get('SERVER_PORT', '5000')}{os.environ.get('SCRIPT_NAME', '/')}")
-    app.run(host='0.0.0.0', port=port, debug=True)
+    
+    # Check if we're in a problematic environment (like Cursor) that breaks Flask's reloader
+    debug_mode = True
+    use_reloader = True
+    
+    # Disable reloader if we detect issues with the environment
+    if 'Cursor' in os.environ.get('_', '') or 'AppImage' in str(os.environ.get('_', '')):
+        use_reloader = False
+        logging.warning("Detected problematic environment, disabling Flask reloader")
+    
+    app.run(host='0.0.0.0', port=port, debug=debug_mode, use_reloader=use_reloader)
 
 
 if __name__ == '__main__':

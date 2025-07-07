@@ -312,7 +312,7 @@ async function fetchAlbums() {
                 photoImg.src = photo.thumbnail_url;
                 photoImg.alt = photo.original_filename;
                 photoImg.onerror = () => {
-                    photoImg.src = `${BASE_URL_PREFIX}/static/placeholder.png`;
+                    photoImg.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iYSIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIj48cmVjdCBmaWxsPSIjZjRmNGY0IiB3aWR0aD0iNDAiIGhlaWdodD0iNDAiLz48cmVjdCBmaWxsPSIjZThlOGU4IiB3aWR0aD0iMjAiIGhlaWdodD0iMjAiLz48cmVjdCBmaWxsPSIjZThlOGU4IiB4PSIyMCIgeT0iMjAiIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNhKSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZSBub3QgZm91bmQ8L3RleHQ+PC9zdmc+';
                 };
 
                 photoThumbnailDiv.appendChild(photoImg);
@@ -348,7 +348,7 @@ async function fetchAlbums() {
                 albumImg.alt = `Cover for ${album.display_name}`;
                 albumImg.classList.add('album-card-img');
                 albumImg.onerror = () => {
-                    albumImg.src = `${BASE_URL_PREFIX}/static/placeholder.png`;
+                    albumImg.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iYSIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIj48cmVjdCBmaWxsPSIjZjRmNGY0IiB3aWR0aD0iNDAiIGhlaWdodD0iNDAiLz48cmVjdCBmaWxsPSIjZThlOGU4IiB3aWR0aD0iMjAiIGhlaWdodD0iMjAiLz48cmVjdCBmaWxsPSIjZThlOGU4IiB4PSIyMCIgeT0iMjAiIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNhKSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZSBub3QgZm91bmQ8L3RleHQ+PC9zdmc+';
                 };
 
                 const albumInfo = document.createElement('div');
@@ -410,7 +410,7 @@ async function fetchPhotos(albumName) { // albumName is now '__root__' or a deco
             photoImg.src = photo.thumbnail_url;
             photoImg.alt = photo.original_filename;
             photoImg.onerror = () => {
-                photoImg.src = `${BASE_URL_PREFIX}/static/placeholder.png`;
+                photoImg.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iYSIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIj48cmVjdCBmaWxsPSIjZjRmNGY0IiB3aWR0aD0iNDAiIGhlaWdodD0iNDAiLz48cmVjdCBmaWxsPSIjZThlOGU4IiB3aWR0aD0iMjAiIGhlaWdodD0iMjAiLz48cmVjdCBmaWxsPSIjZThlOGU4IiB4PSIyMCIgeT0iMjAiIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNhKSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZSBub3QgZm91bmQ8L3RleHQ+PC9zdmc+';
             };
 
             photoThumbnailDiv.appendChild(photoImg);
