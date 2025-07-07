@@ -6,9 +6,11 @@ from pathlib import Path
 from typing import List, Dict, Any
 from flask import url_for
 import traceback
+import logging
 
 from config.settings import config
 from utils.image_processing import is_image_file, get_or_create_thumbnail
+from utils.security import validate_album_name, safe_path_join, SecurityError, sanitize_error_message
 
 
 class Gallery:
@@ -33,7 +35,7 @@ class Gallery:
         photos_list = []
 
         if not fs_path.is_dir():
-            print(f"DEBUG: get_photos_for_path: Filesystem path not found or not a directory: {fs_path}")
+            logging.debug(f"get_photos_for_path: Filesystem path not found or not a directory: {sanitize_error_message(str(fs_path))}")
             return []
 
         try:
@@ -60,10 +62,10 @@ class Gallery:
                     })
             
             photos_list.sort(key=lambda x: x['original_filename'].lower())
-            print(f"DEBUG: get_photos_for_path: Found {len(photos_list)} photos in {fs_path}")
+            logging.debug(f"get_photos_for_path: Found {len(photos_list)} photos in {sanitize_error_message(str(fs_path))}")
             return photos_list
         except Exception as e:
-            print(f"Error in get_photos_for_path for {fs_path}: {e}")
+            logging.error(f"Error in get_photos_for_path for {sanitize_error_message(str(fs_path))}: {e}")
             traceback.print_exc()
             return []
     
@@ -74,8 +76,8 @@ class Gallery:
         Returns:
             Dictionary with mode and albums/photos data
         """
-        print(f"\n--- API albums requested (RUNTIME) ---")
-        print(f"PHOTOS_DIR: {self.photos_root}")
+        logging.info("API albums requested")
+        logging.debug(f"PHOTOS_DIR: {self.photos_root}")
         
         albums_list = []
         
@@ -83,7 +85,7 @@ class Gallery:
         gallery_mode = os.environ.get('GALLERY_MODE', 'ALBUM_DISPLAY')  # Default to album display
 
         if not self.photos_root.is_dir():
-            print(f"Error: PHOTOS_DIR '{self.photos_root}' does not exist or is not a directory. Returning empty response.")
+            logging.error(f"PHOTOS_DIR '{self.photos_root}' does not exist or is not a directory. Returning empty response.")
             return {"mode": "nested_gallery", "albums": []}
 
         # Determine if it's a flat gallery (only root photos, no sub-albums with photos)
@@ -106,11 +108,11 @@ class Gallery:
 
         # Conditional Response based on GALLERY_MODE
         if gallery_mode == 'FLAT_ROOT_DISPLAY' and is_flat_gallery:
-            print(f"Detected FLAT_ROOT_DISPLAY mode. Serving root photos directly.")
+            logging.info("Detected FLAT_ROOT_DISPLAY mode. Serving root photos directly.")
             root_photos_data = self.get_photos_for_path(self.photos_root, '__root__')
             return {"mode": "flat_gallery", "photos": root_photos_data}
         else:
-            print(f"Detected NESTED_GALLERY mode or FLAT_ROOT_DISPLAY disabled. Serving album list.")
+            logging.info("Detected NESTED_GALLERY mode or FLAT_ROOT_DISPLAY disabled. Serving album list.")
             # Rebuild albums_list logic for nested/default display
             found_albums_data = {}
             
@@ -142,13 +144,13 @@ class Gallery:
                             "photo_count": len(current_dir_images)
                         }
                     except Exception as e:
-                        print(f"Error processing album directory {dirpath}: {e}")
+                        logging.error(f"Error processing album directory {sanitize_error_message(str(dirpath))}: {e}")
                         traceback.print_exc()
             
             albums_list = list(found_albums_data.values())
             albums_list.sort(key=lambda x: x['display_name'].lower())
             
-            print(f"API albums response: Found {len(albums_list)} albums in nested mode.")
+            logging.info(f"API albums response: Found {len(albums_list)} albums in nested mode.")
             return {"mode": "nested_gallery", "albums": albums_list}
     
     def get_album_photos(self, album_name: str) -> List[Dict[str, Any]]:
@@ -160,11 +162,19 @@ class Gallery:
             
         Returns:
             List of photo dictionaries
+            
+        Raises:
+            SecurityError: If album name is invalid
         """
-        if album_name == '__root__':
+        # Validate album name (this will also handle '__root__' case)
+        sanitized_album_name = validate_album_name(album_name)
+        
+        if sanitized_album_name == '__root__':
             return self.get_photos_for_path(self.photos_root, '__root__')
         else:
-            return self.get_photos_for_path(self.photos_root / album_name, album_name)
+            # Use safe path join to prevent directory traversal
+            album_path = safe_path_join(self.photos_root, sanitized_album_name)
+            return self.get_photos_for_path(album_path, sanitized_album_name)
 
 
 # Global gallery instance

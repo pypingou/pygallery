@@ -2,11 +2,13 @@
 """Image processing utilities for pygallery."""
 
 import os
+import logging
 from pathlib import Path
 from typing import Tuple
 from PIL import Image
 
 from config.settings import config
+from utils.security import validate_file_extension
 
 
 # Supported image file extensions
@@ -15,7 +17,7 @@ IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.webp')
 
 def is_image_file(filename: str) -> bool:
     """Checks if a file has a supported image extension."""
-    return filename.lower().endswith(IMAGE_EXTENSIONS)
+    return validate_file_extension(filename, IMAGE_EXTENSIONS)
 
 
 def get_or_create_thumbnail(image_path: Path, thumbnail_path: Path, size: Tuple[int, int]) -> None:
@@ -36,7 +38,7 @@ def get_or_create_thumbnail(image_path: Path, thumbnail_path: Path, size: Tuple[
             img.thumbnail(size)
             img.save(thumbnail_path)
     except Exception as e:
-        print(f"Error generating thumbnail for {image_path}: {e}")
+        logging.error(f"Error generating thumbnail for {image_path}: {e}")
 
 
 def scan_and_generate_all_thumbnails() -> None:
@@ -48,10 +50,10 @@ def scan_and_generate_all_thumbnails() -> None:
     thumbnails_root = config.get('THUMBNAILS_DIR')
     thumbnail_size = config.get('THUMBNAIL_SIZE')
     
-    print(f"--- Starting initial thumbnail generation scan for '{photos_root}' ---")
+    logging.info(f"Starting initial thumbnail generation scan for '{photos_root}'")
 
     if not photos_root.is_dir():
-        print(f"Warning: PHOTOS_DIR '{photos_root}' does not exist or is not a directory. Skipping initial thumbnail scan.")
+        logging.warning(f"PHOTOS_DIR '{photos_root}' does not exist or is not a directory. Skipping initial thumbnail scan.")
         return
 
     thumbnails_root.mkdir(parents=True, exist_ok=True)  # Ensure root thumbnail dir exists
@@ -72,4 +74,4 @@ def scan_and_generate_all_thumbnails() -> None:
                 if photo_path.is_file():
                     get_or_create_thumbnail(photo_path, thumbnail_path, thumbnail_size)
     
-    print("--- Initial thumbnail generation scan complete ---") 
+    logging.info("Initial thumbnail generation scan complete") 

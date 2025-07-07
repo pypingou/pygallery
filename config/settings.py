@@ -4,7 +4,7 @@
 import os
 import configparser
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Union
 
 
 class Config:
