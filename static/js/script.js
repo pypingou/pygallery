@@ -171,6 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Lightbox functionality
     const lightbox = document.getElementById('lightbox');
     const lightboxImg = document.getElementById('lightbox-img');
+    const lightboxVideo = document.getElementById('lightbox-video');
     const closeBtn = document.querySelector('.close-btn');
     const prevBtn = document.getElementById('prev-photo-btn');
     const nextBtn = document.getElementById('next-photo-btn');
@@ -505,23 +506,32 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    // Enhanced closeLightbox function with zoom reset
+    // Enhanced closeLightbox function with zoom reset and video pause
     window.closeLightbox = () => {
         if (!lightbox || !lightboxImg) {
             console.error("Lightbox elements not found. Cannot close lightbox.");
             return;
         }
-        
+
         lightbox.classList.remove('active');
-        announceToScreenReader('Image viewer closed');
-        
+        announceToScreenReader('Media viewer closed');
+
+        // Pause video if playing
+        if (lightboxVideo && !lightboxVideo.paused) {
+            lightboxVideo.pause();
+        }
+
         // Reset zoom state
         resetImageTransform(lightboxImg);
-        
+
         setTimeout(() => {
             lightbox.style.display = 'none';
             lightboxImg.src = '';
-            
+            if (lightboxVideo) {
+                lightboxVideo.src = '';
+                lightboxVideo.style.display = 'none';
+            }
+
             // Restore focus to the element that was focused before opening lightbox
             if (focusedElementBeforeLightbox) {
                 focusedElementBeforeLightbox.focus();
@@ -530,46 +540,90 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 300); // Match CSS transition duration
     };
 
-    // Helper function that updates the displayed image and navigation buttons
+    // Helper function that updates the displayed media (image or video) and navigation buttons
     function updateLightboxImage() {
-        if (!lightboxImg || !prevBtn || !nextBtn || !downloadBtn) {
+        if (!lightboxImg || !lightboxVideo || !prevBtn || !nextBtn || !downloadBtn) {
              console.warn("updateLightboxImage: Required lightbox elements not found. Skipping update.");
              return;
         }
 
         if (currentAlbumPhotos.length > 0 && currentPhotoIndex >= 0 && currentPhotoIndex < currentAlbumPhotos.length) {
-            const photo = currentAlbumPhotos[currentPhotoIndex];
-            
-            // Reset zoom when changing images
-            resetImageTransform(lightboxImg);
-            
-            lightboxImg.src = photo.original_url;
-            lightboxImg.alt = `Photo: ${photo.original_filename}`;
+            const media = currentAlbumPhotos[currentPhotoIndex];
+            const isVideo = media.media_type === 'video';
 
-            // Update ARIA descriptions
-            const description = document.getElementById('lightbox-description');
-            if (description) {
-                description.textContent = `Image ${currentPhotoIndex + 1} of ${currentAlbumPhotos.length}: ${photo.original_filename}. Double-tap to zoom, pinch to zoom and pan.`;
+            // Pause and hide video if it was playing
+            if (lightboxVideo) {
+                lightboxVideo.pause();
+                lightboxVideo.style.display = 'none';
+                lightboxVideo.src = '';
+            }
+
+            if (isVideo) {
+                // Show video, hide image
+                lightboxImg.style.display = 'none';
+                lightboxVideo.style.display = 'block';
+
+                // Set video source with correct MIME type
+                const videoSource = lightboxVideo.querySelector('source');
+                if (videoSource) {
+                    videoSource.src = media.original_url;
+                    // Determine MIME type from file extension
+                    const ext = media.original_filename.split('.').pop().toLowerCase();
+                    const mimeTypes = {
+                        'mp4': 'video/mp4',
+                        'webm': 'video/webm',
+                        'mov': 'video/quicktime',
+                        'avi': 'video/x-msvideo',
+                        'mkv': 'video/x-matroska',
+                        'm4v': 'video/mp4',
+                        '3gp': 'video/3gpp'
+                    };
+                    videoSource.type = mimeTypes[ext] || 'video/mp4';
+                }
+                lightboxVideo.load();
+
+                // Update ARIA description for video
+                const description = document.getElementById('lightbox-description');
+                if (description) {
+                    description.textContent = `Video ${currentPhotoIndex + 1} of ${currentAlbumPhotos.length}: ${media.original_filename}. Use video controls to play/pause.`;
+                }
+            } else {
+                // Show image, hide video
+                lightboxVideo.style.display = 'none';
+                lightboxImg.style.display = 'block';
+
+                // Reset zoom when changing images
+                resetImageTransform(lightboxImg);
+
+                lightboxImg.src = media.original_url;
+                lightboxImg.alt = `Photo: ${media.original_filename}`;
+
+                // Update ARIA description for image
+                const description = document.getElementById('lightbox-description');
+                if (description) {
+                    description.textContent = `Image ${currentPhotoIndex + 1} of ${currentAlbumPhotos.length}: ${media.original_filename}. Double-tap to zoom, pinch to zoom and pan.`;
+                }
             }
 
             // Update navigation button states
             prevBtn.style.display = (currentPhotoIndex > 0) ? 'flex' : 'none';
             nextBtn.style.display = (currentPhotoIndex < currentAlbumPhotos.length - 1) ? 'flex' : 'none';
-            
+
             // Update button ARIA attributes
+            const mediaType = isVideo ? 'video' : 'image';
             if (currentPhotoIndex > 0) {
-                prevBtn.setAttribute('aria-label', `Previous image (${currentPhotoIndex} of ${currentAlbumPhotos.length})`);
+                prevBtn.setAttribute('aria-label', `Previous ${mediaType} (${currentPhotoIndex} of ${currentAlbumPhotos.length})`);
             }
             if (currentPhotoIndex < currentAlbumPhotos.length - 1) {
-                nextBtn.setAttribute('aria-label', `Next image (${currentPhotoIndex + 2} of ${currentAlbumPhotos.length})`);
+                nextBtn.setAttribute('aria-label', `Next ${mediaType} (${currentPhotoIndex + 2} of ${currentAlbumPhotos.length})`);
             }
 
             if (downloadBtn) {
-                downloadBtn.setAttribute('download', photo.original_filename);
-                downloadBtn.setAttribute('aria-label', `Download ${photo.original_filename}`);
+                downloadBtn.setAttribute('download', media.original_filename);
+                downloadBtn.setAttribute('aria-label', `Download ${media.original_filename}`);
             }
         } else {
-            console.warn("updateLightboxImage: No photos data or invalid index. Cannot update lightbox image.");
+            console.warn("updateLightboxImage: No media data or invalid index. Cannot update lightbox.");
         }
     }
 
@@ -805,26 +859,42 @@ async function fetchPhotos(albumName) {
     }
 }
 
-// Enhanced createPhotoElement function with accessibility
+// Enhanced createPhotoElement function with accessibility and video support
 function createPhotoElement(photo, index, photosArray) {
     const photoThumbnail = document.createElement('div');
     photoThumbnail.className = 'photo-thumbnail';
+    const isVideo = photo.media_type === 'video';
+
     photoThumbnail.setAttribute('role', 'button');
-    photoThumbnail.setAttribute('aria-label', `View photo ${photo.original_filename}`);
+    photoThumbnail.setAttribute('aria-label', `View ${isVideo ? 'video' : 'photo'} ${photo.original_filename}`);
     photoThumbnail.setAttribute('tabindex', '0');
-    
+
     const img = document.createElement('img');
     img.src = photo.thumbnail_url;
-    img.alt = `Photo: ${photo.original_filename}`;
+    img.alt = `${isVideo ? 'Video' : 'Photo'}: ${photo.original_filename}`;
     img.loading = 'lazy';
-    
+
     photoThumbnail.appendChild(img);
-    
+
+    // Add video play icon overlay for videos
+    if (isVideo) {
+        const playIconOverlay = document.createElement('div');
+        playIconOverlay.className = 'video-play-overlay';
+        playIconOverlay.setAttribute('aria-hidden', 'true');
+        playIconOverlay.innerHTML = `
+            <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="30" cy="30" r="28" fill="rgba(0, 0, 0, 0.6)" stroke="white" stroke-width="2"/>
+                <path d="M24 18 L24 42 L42 30 Z" fill="white"/>
+            </svg>
+        `;
+        photoThumbnail.appendChild(playIconOverlay);
+    }
+
     // Add click handler
     photoThumbnail.addEventListener('click', () => {
         openLightbox(index, photosArray);
     });
-    
+
     // Add keyboard support
     photoThumbnail.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -832,7 +902,7 @@ function createPhotoElement(photo, index, photosArray) {
             openLightbox(index, photosArray);
         }
     });
-    
+
     return photoThumbnail;
 }
 

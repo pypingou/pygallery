@@ -198,6 +198,7 @@ body {
     align-items: center;
     height: 250px; /* Consistent height for thumbnails */
     padding: 10px; /* Padding inside the card */
+    position: relative; /* For video overlay positioning */
     /* Ensure minimum touch target size */
     min-height: var(--min-touch-target);
     /* Improve touch feedback */
@@ -222,6 +223,22 @@ body {
     border-radius: 8px; /* Slightly rounded corners for thumbnails */
     object-fit: contain; /* Ensure the entire thumbnail is visible without cropping */
     display: block; /* Remove extra space below image */
+}
+
+/* Video play overlay icon */
+.video-play-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 10;
+    opacity: 0.9;
+    transition: opacity 0.3s ease;
+}
+
+.photo-thumbnail:hover .video-play-overlay {
+    opacity: 1;
 }
 
 /* Lightbox Modal Styles */
@@ -290,6 +307,17 @@ body {
 .lightbox.active .lightbox-content {
     opacity: 1;
     transform: scale(1);
+}
+
+/* Video element in lightbox */
+#lightbox-video {
+    max-width: 90%;
+    max-height: 90%;
+    object-fit: contain;
+}
+
+#lightbox-video::-webkit-media-controls {
+    background-color: rgba(0, 0, 0, 0.7);
 }
 
 .close-btn {

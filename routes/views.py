@@ -45,21 +45,25 @@ def album_page(album_name: str) -> str:
 
 @gallery_bp.route('/photos/<path:filename>')
 def serve_photo(filename: str) -> Response:
-    """Serves original photo files. Filename now includes album subpaths."""
+    """
+    Serves original media files (photos and videos).
+    Filename includes album subpaths. MIME type is automatically set by Flask.
+    """
     try:
         # Validate filename components
         photos_dir = config.get('PHOTOS_DIR')
-        
+
         # Use safe path join to prevent directory traversal
         full_photo_path = safe_path_join(photos_dir, filename)
-        
+
         if not full_photo_path.is_file():
-            logging.warning(f"Photo not found: {sanitize_error_message(str(full_photo_path))}")
-            abort(404, description="Photo not found")
+            logging.warning(f"Media file not found: {sanitize_error_message(str(full_photo_path))}")
+            abort(404, description="Media file not found")
 
         directory_to_serve_from = full_photo_path.parent
         file_base_name = full_photo_path.name
-        logging.info(f"Serving photo: {sanitize_error_message(str(full_photo_path))}")
+        logging.info(f"Serving media file: {sanitize_error_message(str(full_photo_path))}")
+        # send_from_directory automatically sets correct MIME type based on file extension
         return send_from_directory(directory_to_serve_from, file_base_name)
         
     except SecurityError as e:
