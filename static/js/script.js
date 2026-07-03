@@ -765,10 +765,10 @@ function createAlbumElement(album, index) {
     const albumImg = document.createElement('div');
     albumImg.className = 'album-card-img';
     albumImg.setAttribute('aria-hidden', 'true');
-    
-    if (album.cover_image_url) {
+
+    if (album.cover_thumbnail_url) {
         const img = document.createElement('img');
-        img.src = album.cover_image_url;
+        img.src = album.cover_thumbnail_url;
         img.alt = '';
         img.setAttribute('aria-hidden', 'true');
         img.loading = 'lazy';
