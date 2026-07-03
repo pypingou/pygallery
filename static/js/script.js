@@ -555,7 +555,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (lightboxVideo) {
                 lightboxVideo.pause();
                 lightboxVideo.style.display = 'none';
-                lightboxVideo.src = '';
+                lightboxVideo.removeAttribute('src');
+                lightboxVideo.load(); // Reset video element
             }
 
             if (isVideo) {
@@ -563,23 +564,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 lightboxImg.style.display = 'none';
                 lightboxVideo.style.display = 'block';
 
-                // Set video source with correct MIME type
-                const videoSource = lightboxVideo.querySelector('source');
-                if (videoSource) {
-                    videoSource.src = media.original_url;
-                    // Determine MIME type from file extension
-                    const ext = media.original_filename.split('.').pop().toLowerCase();
-                    const mimeTypes = {
-                        'mp4': 'video/mp4',
-                        'webm': 'video/webm',
-                        'mov': 'video/quicktime',
-                        'avi': 'video/x-msvideo',
-                        'mkv': 'video/x-matroska',
-                        'm4v': 'video/mp4',
-                        '3gp': 'video/3gpp'
-                    };
-                    videoSource.type = mimeTypes[ext] || 'video/mp4';
-                }
+                // Set video source directly on video element (better for authenticated URLs)
+                // Determine MIME type from file extension
+                const ext = media.original_filename.split('.').pop().toLowerCase();
+                const mimeTypes = {
+                    'mp4': 'video/mp4',
+                    'webm': 'video/webm',
+                    'mov': 'video/quicktime',
+                    'avi': 'video/x-msvideo',
+                    'mkv': 'video/x-matroska',
+                    'm4v': 'video/mp4',
+                    '3gp': 'video/3gpp'
+                };
+
+                // Set src directly on video element (inherits auth context)
+                lightboxVideo.src = media.original_url;
+                lightboxVideo.type = mimeTypes[ext] || 'video/mp4';
                 lightboxVideo.load();
 
                 // Update ARIA description for video
