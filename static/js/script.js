@@ -585,7 +585,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 lightboxVideo.load(); // Reset video element
             }
 
-            // Hide video overlay when switching media
+            // Always reset overlay state when switching media
             if (videoOverlay) {
                 videoOverlay.style.display = 'none';
                 videoOverlay.classList.remove('playing');
@@ -596,8 +596,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 lightboxImg.style.display = 'none';
                 lightboxVideo.style.display = 'block';
 
-                // Show video overlay (play button indicator)
+                // Show video overlay (play button indicator) - ensure playing class is removed
                 if (videoOverlay) {
+                    videoOverlay.classList.remove('playing'); // Defensive: ensure it's removed
                     videoOverlay.style.display = 'flex';
                 }
 
