@@ -725,23 +725,33 @@ async function fetchAlbums() {
         
         const data = await response.json();
         hideLoading();
-        
+
         const albumListElement = document.getElementById('album-list');
         if (!albumListElement) {
             throw new Error('Album list element not found');
         }
-        
+
         albumListElement.innerHTML = '';
-        
-        if (data.albums && data.albums.length > 0) {
+
+        // Handle flat gallery mode (photos directly in root)
+        if (data.mode === 'flat_gallery' && data.photos && data.photos.length > 0) {
+            // Display photos directly (same as album view)
+            currentAlbumPhotos = data.photos;
+            data.photos.forEach((photo, index) => {
+                const photoElement = createPhotoElement(photo, index, data.photos);
+                albumListElement.appendChild(photoElement);
+            });
+            announceToScreenReader(`${data.photos.length} photos loaded`);
+        } else if (data.albums && data.albums.length > 0) {
+            // Display album cards (nested gallery mode)
             data.albums.forEach((album, index) => {
                 const albumElement = createAlbumElement(album, index);
                 albumListElement.appendChild(albumElement);
             });
             announceToScreenReader(`${data.albums.length} photo albums loaded`);
         } else {
-            albumListElement.innerHTML = '<div class="empty-album-message" role="status"><p>No albums found.</p></div>';
-            announceToScreenReader('No photo albums found');
+            albumListElement.innerHTML = '<div class="empty-album-message" role="status"><p>No albums or photos found.</p></div>';
+            announceToScreenReader('No albums or photos found');
         }
     } catch (error) {
         console.error('Error fetching albums:', error);
