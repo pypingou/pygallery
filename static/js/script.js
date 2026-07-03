@@ -819,8 +819,11 @@ async function fetchPhotos(albumName) {
         if (albumName === '__root__') {
             apiUrl = `${BASE_URL_PREFIX}/api/album/__root__`;
         } else {
-            const encodedAlbumName = encodeURIComponent(albumName);
-            apiUrl = `${BASE_URL_PREFIX}/api/album/${encodedAlbumName}/photos`;
+            // Don't encode slashes - Flask's <path:> route expects real slashes
+            // Only encode individual path components to handle special characters
+            const pathParts = albumName.split('/');
+            const encodedPath = pathParts.map(part => encodeURIComponent(part)).join('/');
+            apiUrl = `${BASE_URL_PREFIX}/api/album/${encodedPath}/photos`;
         }
 
         const response = await fetch(apiUrl);
