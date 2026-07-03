@@ -21,10 +21,13 @@ RUN mkdir -p photos thumbnails
 
 # Expose the port your Flask app runs on (default is 5000 from config.ini)
 ARG FLASK_PORT=5000
+ENV FLASK_PORT=${FLASK_PORT}
 EXPOSE ${FLASK_PORT}
 
 # Command to run the Flask application using Gunicorn
 # Set SCRIPT_NAME to '/' as the application runs at the root of the container.
 # This ensures consistency for Flask's internal routing.
-CMD gunicorn -b 0.0.0.0:5000 --workers 4 --timeout 120 --access-logfile - --error-logfile - --forwarded-allow-ips "*" --env SCRIPT_NAME="/" app:app
+CMD gunicorn -b 0.0.0.0:${FLASK_PORT} --workers 4 --timeout 120 \
+    --access-logfile - --error-logfile - --forwarded-allow-ips "*" \
+    --env SCRIPT_NAME="/" app:app
 
