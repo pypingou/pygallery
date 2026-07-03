@@ -216,10 +216,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Video overlay management - hide when playing, show when paused
     if (lightboxVideo) {
+        // Make the overlay clickable to start video playback
+        const videoOverlay = document.getElementById('lightbox-video-overlay');
+        if (videoOverlay) {
+            // Allow clicks through to the video element initially
+            videoOverlay.style.pointerEvents = 'auto';
+            videoOverlay.style.cursor = 'pointer';
+            videoOverlay.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (lightboxVideo.paused) {
+                    lightboxVideo.play();
+                }
+            });
+        }
+
         lightboxVideo.addEventListener('play', () => {
             const videoOverlay = document.getElementById('lightbox-video-overlay');
             if (videoOverlay) {
                 videoOverlay.classList.add('playing');
+                videoOverlay.style.pointerEvents = 'none'; // Disable clicks when playing
+            }
+            // Add controls once user starts playing
+            if (!lightboxVideo.hasAttribute('controls')) {
+                lightboxVideo.setAttribute('controls', 'controls');
             }
         });
 
@@ -227,6 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const videoOverlay = document.getElementById('lightbox-video-overlay');
             if (videoOverlay) {
                 videoOverlay.classList.remove('playing');
+                videoOverlay.style.pointerEvents = 'auto'; // Re-enable clicks when paused
             }
         });
 
@@ -234,6 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const videoOverlay = document.getElementById('lightbox-video-overlay');
             if (videoOverlay) {
                 videoOverlay.classList.remove('playing');
+                videoOverlay.style.pointerEvents = 'auto';
             }
         });
     }
