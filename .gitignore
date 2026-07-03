@@ -28,3 +28,6 @@ Pipfile
 # Ignore Photos directory
 photos/
 thumbnails/
+
+# Ignore log files
+*.log

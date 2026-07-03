@@ -4,6 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Album: {{ album_name }}</title>
+    <meta name="description" content="Photo album: {{ album_name }}">
+    <meta name="author" content="Photo Gallery">
+    <meta name="keywords" content="photos, gallery, album, {{ album_name }}">
+    
+    <!-- Structured Data for SEO -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "ImageGallery",
+        "name": "Album: {{ album_name }}",
+        "description": "Photo album: {{ album_name }}"
+    }
+    </script>
+    
     <!-- Use url_for for static CSS file -->
     <link rel="stylesheet" href="{{ url_for('gallery.static', filename='css/style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
@@ -12,36 +26,96 @@
     </script>
 </head>
 <body>
-    <header class="header">
-        <nav class="back-nav">
+    <!-- Skip to main content link for screen readers -->
+    <a href="#main-content" class="sr-only-focusable">Skip to main content</a>
+    
+    <header class="header" role="banner">
+        <nav class="back-nav" role="navigation" aria-label="Breadcrumb">
             <!-- Use url_for for back button -->
-            <a href="{{ url_for('gallery.index') }}" class="back-button">&larr; Back to Galleries</a>
+            <a href="{{ url_for('gallery.index') }}" class="back-button" aria-label="Go back to photo gallery home">
+                <span aria-hidden="true">&larr;</span> Back to Galleries
+            </a>
         </nav>
         <h1 class="header-title" id="album-title">Album: {{ album_name }}</h1>
+        <p class="header-subtitle sr-only">Browse through photos in this album</p>
     </header>
 
-    <main class="container">
-        <section id="photo-grid" class="grid-container"></section>
+    <main id="main-content" class="container" role="main">
+        <article class="album-content">
+            <header class="album-header">
+                <h2 class="sr-only">Photos in {{ album_name }}</h2>
+                <p class="album-description sr-only">
+                    View and navigate through all photos in the {{ album_name }} album.
+                </p>
+            </header>
+            
+            <section id="photo-grid" class="grid-container" role="region" aria-label="Photos in album">
+                <!-- Photos will be dynamically loaded here -->
+            </section>
+            
+            <!-- Loading indicator -->
+            <aside id="loading-indicator" class="loading-indicator" role="status" aria-live="polite" aria-label="Loading photos">
+                <span class="sr-only">Loading photos...</span>
+            </aside>
+            
+            <!-- Error message container -->
+            <aside id="error-message" class="error-message" role="alert" aria-live="assertive" style="display: none;">
+                <!-- Error messages will be displayed here -->
+            </aside>
+            
+            <!-- Empty album message -->
+            <aside id="empty-album-message" class="empty-album-message" role="status" style="display: none;">
+                <p>This album is empty. No photos to display.</p>
+            </aside>
+        </article>
     </main>
 
     <!-- The Lightbox Modal for large images -->
-    <div id="lightbox" class="lightbox" onclick="closeLightbox()">
-        <span class="close-btn">&times;</span>
-        <!-- Navigation buttons -->
-        <a class="lightbox-nav-btn prev-btn" id="prev-photo-btn">&#10094;</a>
-        <img id="lightbox-img" class="lightbox-content" src="" alt="Full size image">
-        <a class="lightbox-nav-btn next-btn" id="next-photo-btn">&#10095;</a>
-        <!-- Download and Share buttons -->
-        <div class="lightbox-controls-bottom">
-            <button class="download-btn" id="download-photo-btn">Download</button>
-            <button class="share-btn" id="share-photo-btn">Share Link</button>
+    <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightbox-title" aria-describedby="lightbox-description" onclick="closeLightbox()">
+        <div class="lightbox-content-wrapper">
+            <header class="lightbox-header">
+                <h2 id="lightbox-title" class="sr-only">Image viewer</h2>
+                <button class="close-btn" aria-label="Close image viewer" title="Close (Esc)">&times;</button>
+            </header>
+            
+            <!-- Navigation buttons -->
+            <button class="lightbox-nav-btn prev-btn" id="prev-photo-btn" aria-label="Previous image" title="Previous image (←)">
+                <span aria-hidden="true">&#10094;</span>
+            </button>
+            
+            <figure class="lightbox-image-container">
+                <img id="lightbox-img" class="lightbox-content" src="" alt="" role="img">
+                <figcaption id="lightbox-description" class="sr-only">
+                    <!-- Image description will be set dynamically -->
+                </figcaption>
+            </figure>
+            
+            <button class="lightbox-nav-btn next-btn" id="next-photo-btn" aria-label="Next image" title="Next image (→)">
+                <span aria-hidden="true">&#10095;</span>
+            </button>
+            
+            <!-- Download and Share buttons -->
+            <nav class="lightbox-controls-bottom" role="group" aria-label="Image actions">
+                <button class="download-btn" id="download-photo-btn" aria-label="Download image" title="Download image">
+                    <span aria-hidden="true">📥</span>
+                    <span>Download</span>
+                </button>
+                <button class="share-btn" id="share-photo-btn" aria-label="Copy image link" title="Copy image link">
+                    <span aria-hidden="true">🔗</span>
+                    <span>Share Link</span>
+                </button>
+            </nav>
         </div>
+        
         <!-- Message box for copy confirmation -->
-        <div id="message-box" class="message-box"></div>
+        <aside id="message-box" class="message-box" role="status" aria-live="polite"></aside>
     </div>
 
-    <footer class="footer">
+    <footer class="footer" role="contentinfo">
         <p>Coded by Gemini upon instructions by pingou</p>
+        <nav class="footer-nav sr-only">
+            <a href="#main-content">Back to top</a>
+        </nav>
     </footer>
 
     <!-- Use url_for for static JavaScript file -->
