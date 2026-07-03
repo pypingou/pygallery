@@ -214,30 +214,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Video overlay management - hide when playing, show when paused
-    if (lightboxVideo) {
-        lightboxVideo.addEventListener('play', () => {
-            const videoOverlay = document.getElementById('lightbox-video-overlay');
-            if (videoOverlay) {
-                videoOverlay.classList.add('playing');
-            }
-        });
-
-        lightboxVideo.addEventListener('pause', () => {
-            const videoOverlay = document.getElementById('lightbox-video-overlay');
-            if (videoOverlay) {
-                videoOverlay.classList.remove('playing');
-            }
-        });
-
-        lightboxVideo.addEventListener('ended', () => {
-            const videoOverlay = document.getElementById('lightbox-video-overlay');
-            if (videoOverlay) {
-                videoOverlay.classList.remove('playing');
-            }
-        });
-    }
-
     if (lightbox) {
         lightbox.addEventListener('click', (event) => {
             if (event.target === lightbox) {
@@ -575,8 +551,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const media = currentAlbumPhotos[currentPhotoIndex];
             const isVideo = media.media_type === 'video';
 
-            const videoOverlay = document.getElementById('lightbox-video-overlay');
-
             // Pause and hide video if it was playing
             if (lightboxVideo) {
                 lightboxVideo.pause();
@@ -585,21 +559,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 lightboxVideo.load(); // Reset video element
             }
 
-            // Hide video overlay when switching media
-            if (videoOverlay) {
-                videoOverlay.style.display = 'none';
-                videoOverlay.classList.remove('playing');
-            }
-
             if (isVideo) {
                 // Show video, hide image
                 lightboxImg.style.display = 'none';
                 lightboxVideo.style.display = 'block';
-
-                // Show video overlay (play button indicator)
-                if (videoOverlay) {
-                    videoOverlay.style.display = 'flex';
-                }
 
                 // Set video source directly on video element (better for authenticated URLs)
                 // Determine MIME type from file extension
