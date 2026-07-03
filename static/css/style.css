@@ -321,6 +321,41 @@ body {
     background-color: rgba(0, 0, 0, 0.7);
 }
 
+/* Hide browser's default center play button to avoid duplicate with our custom overlay */
+#lightbox-video::-webkit-media-controls-start-playback-button {
+    display: none;
+}
+
+/* Video play button overlay - always visible when paused */
+.lightbox-video-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80px;
+    height: 80px;
+    background-color: rgba(0, 0, 0, 0.7);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 1002;
+    transition: opacity 0.3s ease;
+}
+
+.lightbox-video-overlay svg {
+    width: 40px;
+    height: 40px;
+    fill: white;
+    margin-left: 4px; /* Optical alignment for play triangle */
+}
+
+/* Hide overlay when video is playing */
+.lightbox-video-overlay.playing {
+    opacity: 0;
+}
+
 .close-btn {
     position: absolute;
     top: 15px;
