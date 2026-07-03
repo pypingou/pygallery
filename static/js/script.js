@@ -753,7 +753,10 @@ async function fetchAlbums() {
 // Enhanced createAlbumElement function with accessibility
 function createAlbumElement(album, index) {
     const albumCard = document.createElement('a');
-    albumCard.href = `${BASE_URL_PREFIX}/album/${encodeURIComponent(album.name)}`;
+    // Don't encode slashes - encode each path component separately to preserve path structure
+    const pathParts = album.name.split('/');
+    const encodedPath = pathParts.map(part => encodeURIComponent(part)).join('/');
+    albumCard.href = `${BASE_URL_PREFIX}/album/${encodedPath}`;
     albumCard.className = 'album-card';
     albumCard.setAttribute('role', 'link');
     albumCard.setAttribute('aria-label', `View album ${album.name} with ${album.photo_count} photos`);
