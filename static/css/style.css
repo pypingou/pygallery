@@ -317,13 +317,25 @@ body {
     cursor: pointer;
 }
 
-#lightbox-video::-webkit-media-controls {
-    background-color: rgba(0, 0, 0, 0.7);
+/* Hide all possible webkit video overlay elements */
+#lightbox-video::-webkit-media-controls-enclosure {
+    /* Keep the controls bar visible */
 }
 
-/* Hide browser's native play overlay completely */
 #lightbox-video::-webkit-media-controls-overlay-enclosure {
     display: none !important;
+}
+
+#lightbox-video::-webkit-media-controls-overlay-play-button {
+    display: none !important;
+}
+
+#lightbox-video::-internal-media-controls-overlay-cast-button {
+    display: none !important;
+}
+
+#lightbox-video {
+    background-color: rgba(0, 0, 0, 0.7);
 }
 
 /* Video play button overlay - always visible when paused */
