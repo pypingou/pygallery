@@ -36,48 +36,42 @@ def create_app() -> Flask:
     return app
 
 
+# Create Flask app instance for gunicorn
+app = create_app()
+
+# Ensure directories exist
+photos_dir = config.get('PHOTOS_DIR')
+thumbnails_dir = config.get('THUMBNAILS_DIR')
+photos_dir.mkdir(parents=True, exist_ok=True)
+thumbnails_dir.mkdir(parents=True, exist_ok=True)
+
+# Generate thumbnails at startup (runs once when gunicorn loads the module)
+with app.test_request_context():
+    scan_and_generate_all_thumbnails()
+
+
 def main() -> None:
-    """Main application entry point."""
-    # Create Flask app
-    app = create_app()
-    
-    # Ensure root photo and thumbnail directories exist
-    photos_dir = config.get('PHOTOS_DIR')
-    thumbnails_dir = config.get('THUMBNAILS_DIR')
+    """Main application entry point for local development."""
     port = config.get('PORT')
-    
-    photos_dir.mkdir(parents=True, exist_ok=True)
-    thumbnails_dir.mkdir(parents=True, exist_ok=True)
 
     # For local development, simulate the SCRIPT_NAME and SERVER_NAME
     # that Gunicorn/Apache would provide in a deployed environment.
-    # This allows url_for to generate correct URLs.
     os.environ['SCRIPT_NAME'] = os.environ.get('SCRIPT_NAME', '/')  # Internal root
     os.environ['SERVER_NAME'] = os.environ.get('SERVER_NAME', 'localhost')
     os.environ['SERVER_PORT'] = os.environ.get('SERVER_PORT', str(port))
     os.environ['wsgi.url_scheme'] = os.environ.get('wsgi.url_scheme', 'http')  # Default to http for local
 
-    # Call the initial thumbnail generation scan at startup
-    # This runs within a dummy request context so url_for works for local scan_and_generate_all_thumbnails calls.
-    with app.test_request_context(
-        path=os.environ['SCRIPT_NAME'],  # Path is the app's root, e.g., '/'
-        base_url=f"{os.environ['wsgi.url_scheme']}://{os.environ['SERVER_NAME']}:{os.environ['SERVER_PORT']}"
-    ):
-        from flask import request
-        request.environ['SCRIPT_NAME'] = os.environ['SCRIPT_NAME']  # Ensure SCRIPT_NAME is set
-        scan_and_generate_all_thumbnails()  # This function now just generates thumbnails
-
     print(f"Starting Flask app on {os.environ.get('wsgi.url_scheme', 'http')}://{os.environ.get('SERVER_NAME', 'localhost')}:{os.environ.get('SERVER_PORT', '5000')}{os.environ.get('SCRIPT_NAME', '/')}")
-    
+
     # Check if we're in a problematic environment (like Cursor) that breaks Flask's reloader
     debug_mode = True
     use_reloader = True
-    
+
     # Disable reloader if we detect issues with the environment
     if 'Cursor' in os.environ.get('_', '') or 'AppImage' in str(os.environ.get('_', '')):
         use_reloader = False
         logging.warning("Detected problematic environment, disabling Flask reloader")
-    
+
     app.run(host='0.0.0.0', port=port, debug=debug_mode, use_reloader=use_reloader)
 
 
