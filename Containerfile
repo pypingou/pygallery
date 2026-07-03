@@ -4,6 +4,11 @@ FROM python:3.9-slim-buster
 # Set the working directory in the container
 WORKDIR /app
 
+# Install system dependencies (ffmpeg for video thumbnail generation)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy the requirements file first to leverage Docker cache
 COPY requirements.txt .
 
